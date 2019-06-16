@@ -68,25 +68,29 @@ static uint8_t _kdf_out_3[32] = {
     0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33,
 };
 
-int __real_secp256k1_ecdsa_sign(
+int __real_secp256k1_ecdsa_sign_to_contract(
     const secp256k1_context* ctx,
     secp256k1_ecdsa_signature* sig,
     const unsigned char* msg32,
     const unsigned char* seckey,
     secp256k1_nonce_function noncefp,
-    const void* ndata);
+    const void* ndata,
+    const unsigned char* s2c_data32);
 
-int __wrap_secp256k1_ecdsa_sign(
+int __wrap_secp256k1_ecdsa_sign_to_contract(
     const secp256k1_context* ctx,
     secp256k1_ecdsa_signature* sig,
     const unsigned char* msg32,
     const unsigned char* seckey,
     secp256k1_nonce_function noncefp,
-    const void* ndata)
+    const void* ndata,
+    const unsigned char* s2c_data32)
 {
     check_expected(msg32);
     check_expected(seckey);
-    return __real_secp256k1_ecdsa_sign(ctx, sig, msg32, seckey, noncefp, ndata);
+    check_expected(s2c_data32);
+    return __real_secp256k1_ecdsa_sign_to_contract(
+        ctx, sig, msg32, seckey, noncefp, ndata, s2c_data32);
 }
 
 bool __wrap_salt_hash_data(
@@ -141,11 +145,12 @@ static void _test_keystore_sign_secp256k1(void** state)
     memset(msg, 0x88, sizeof(msg));
     uint8_t sig[64] = {0};
     secp256k1_context* ctx = wally_get_secp_context();
+    uint8_t host_nonce[32] = {0};
 
     {
         // fails because keystore is locked
-        assert_false(
-            keystore_sign_secp256k1(keypath, sizeof(keypath) / sizeof(uint32_t), msg, sig));
+        assert_false(keystore_sign_secp256k1(
+            keypath, sizeof(keypath) / sizeof(uint32_t), msg, host_nonce, sig));
     }
     {
         mock_state(_mock_seed, _mock_bip39_seed);
@@ -155,10 +160,13 @@ static void _test_keystore_sign_secp256k1(void** state)
             0xf0, 0x2e, 0xe8, 0xae, 0x3f, 0x58, 0x92, 0x32, 0x9d, 0x67, 0xdf,
             0xd4, 0xad, 0x05, 0xe9, 0xc3, 0xd0, 0x6e, 0xdf, 0x74, 0xfb,
         };
-        expect_memory(__wrap_secp256k1_ecdsa_sign, seckey, expected_seckey, 32);
-        expect_memory(__wrap_secp256k1_ecdsa_sign, msg32, msg, sizeof(msg));
+        expect_memory(__wrap_secp256k1_ecdsa_sign_to_contract, seckey, expected_seckey, 32);
+        expect_memory(__wrap_secp256k1_ecdsa_sign_to_contract, msg32, msg, sizeof(msg));
+        expect_memory(
+            __wrap_secp256k1_ecdsa_sign_to_contract, s2c_data32, host_nonce, sizeof(host_nonce));
         // check sig by verifying it against the msg.
-        assert_true(keystore_sign_secp256k1(keypath, sizeof(keypath) / sizeof(uint32_t), msg, sig));
+        assert_true(keystore_sign_secp256k1(
+            keypath, sizeof(keypath) / sizeof(uint32_t), msg, host_nonce, sig));
         secp256k1_pubkey pubkey = {0};
         assert_true(_get_pubkey(keypath, sizeof(keypath) / sizeof(uint32_t), &pubkey));
         secp256k1_ecdsa_signature secp256k1_sig = {0};

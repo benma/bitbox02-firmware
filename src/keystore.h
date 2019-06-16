@@ -133,10 +133,27 @@ USE_RESULT uint16_t keystore_get_bip39_wordlist_length(void);
 USE_RESULT bool keystore_get_bip39_word(uint16_t idx, char** word_out);
 
 /**
+ * Get the signing client commitment of the original nonce (before tweaking it with the host nonce).
+ * @param[in] host_nonce_commitment `sha256(host_nonce)` as passed to `keystore_sign_secp256k1()`.
+ * @param[in] keypath derivation keypath
+ * @param[in] keypath_len size of keypath buffer
+ * @param[in] msg32 32 byte message to sign
+ * @param[out] client_nonce_commitment_out 33 bytes compressed pubkey comitting to the nonce.
+ * @return true on success, false if the keystore is locked.
+ */
+USE_RESULT bool keystore_nonce_commit(
+    const uint8_t* host_nonce_commitment,
+    const uint32_t* keypath,
+    size_t keypath_len,
+    const uint8_t* msg32,
+    uint8_t* client_nonce_commitment_out);
+
+/**
  * Sign message with private key at the given keypath. Keystore must be unlocked.
  * @param[in] keypath derivation keypath
  * @param[in] keypath_len size of keypath buffer
  * @param[in] msg32 32 byte message to sign
+ * @param[in] host_nonce 32 byte nonce to mix with the normal nonce.
  * @param[out] sig resulting signature in compact format. Must be 64 bytes.
  * Parse with secp256k1_ecdsa_signature_serialize_compact().
  * @return true on success, false if the keystore is locked.
@@ -145,6 +162,7 @@ USE_RESULT bool keystore_sign_secp256k1(
     const uint32_t* keypath,
     size_t keypath_len,
     const uint8_t* msg32,
+    const uint8_t* host_nonce,
     uint8_t* sig_compact_out);
 
 #endif

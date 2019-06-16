@@ -457,10 +457,53 @@ bool keystore_get_bip39_word(uint16_t idx, char** word_out)
     return bip39_get_word(NULL, idx, word_out) == WALLY_OK;
 }
 
+bool keystore_nonce_commit(
+    const uint8_t* host_nonce_commitment,
+    const uint32_t* keypath,
+    size_t keypath_len,
+    const uint8_t* msg32,
+    uint8_t* client_nonce_commitment_out)
+{
+    if (keystore_is_locked()) {
+        return false;
+    }
+    struct ext_key xprv __attribute__((__cleanup__(keystore_zero_xkey))) = {0};
+    if (!_get_xprv_twice(keypath, keypath_len, &xprv)) {
+        return false;
+    }
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+    // The function expects non-const, but we know it won't modify the argument.
+    uint8_t* cast = (uint8_t*)host_nonce_commitment;
+#pragma GCC diagnostic pop
+    secp256k1_context* ctx = wally_get_secp_context();
+    secp256k1_pubkey client_commitment;
+    if (!secp256k1_ecdsa_anti_nonce_sidechan_client_commit(
+            ctx,
+            &client_commitment,
+            msg32,
+            xprv.priv_key + 1, // first byte is 0,
+            cast)) {
+        return false;
+    }
+
+    size_t outlen = 33;
+    if (!secp256k1_ec_pubkey_serialize(
+            ctx,
+            client_nonce_commitment_out,
+            &outlen,
+            &client_commitment,
+            SECP256K1_EC_COMPRESSED)) {
+        return false;
+    }
+    return true;
+}
+
 bool keystore_sign_secp256k1(
     const uint32_t* keypath,
     size_t keypath_len,
     const uint8_t* msg32,
+    const uint8_t* host_nonce,
     uint8_t* sig_compact_out)
 {
     if (keystore_is_locked()) {
@@ -472,13 +515,14 @@ bool keystore_sign_secp256k1(
     }
     secp256k1_context* ctx = wally_get_secp_context();
     secp256k1_ecdsa_signature secp256k1_sig = {0};
-    if (!secp256k1_ecdsa_sign(
+    if (!secp256k1_ecdsa_sign_to_contract(
             ctx,
             &secp256k1_sig,
             msg32,
             xprv.priv_key + 1, // first byte is 0
             NULL, // default secp256k1_nonce_function_rfc6979
-            NULL)) {
+            NULL,
+            host_nonce)) {
         return false;
     }
     return secp256k1_ecdsa_signature_serialize_compact(ctx, sig_compact_out, &secp256k1_sig) == 1;

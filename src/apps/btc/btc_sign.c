@@ -28,9 +28,10 @@
 
 typedef enum {
     STATE_INIT,
-    STATE_INPUTS_PASS1,
-    STATE_OUTPUTS,
-    STATE_INPUTS_PASS2,
+    STATE_INPUTS_PASS1, // accumulate hashes
+    STATE_OUTPUTS, // confirm outputs
+    STATE_INPUTS_PASS2a, // exchange nonce commitments
+    STATE_INPUTS_PASS2b, // sign
 } _signing_state_t;
 
 static _signing_state_t _state = STATE_INIT;
@@ -48,7 +49,7 @@ static uint32_t _index;
 // used during STATE_INPUTS_PASS1. Will contain the sum of all spent output
 // values.
 static uint64_t _inputs_sum_pass1 = 0;
-// used during STATE_INPUTS_PASS2. Can't exceed _inputs_sum_pass1.
+// used during STATE_INPUTS_PASS2b. Can't exceed _inputs_sum_pass1.
 static uint64_t _inputs_sum_pass2 = 0;
 // used during STATE_OUTPUTS. Will contain the sum of all our output values
 // (change or receive to self).
@@ -144,7 +145,7 @@ app_btc_sign_error_t app_btc_sign_init(
     _locktime = request->locktime;
     // Want input #0
     _state = STATE_INPUTS_PASS1;
-    next_out->type = BTCSignNextResponse_Type_INPUT;
+    next_out->type = BTCSignNextResponse_Type_INPUT_PASS1;
     next_out->index = _index;
     return APP_BTC_SIGN_OK;
 }
@@ -176,7 +177,7 @@ static app_btc_sign_error_t _sign_input_pass1(
     if (_index < _num_inputs - 1) {
         _index++;
         // Want next input
-        next_out->type = BTCSignNextResponse_Type_INPUT;
+        next_out->type = BTCSignNextResponse_Type_INPUT_PASS1;
         next_out->index = _index;
     } else {
         // Done with inputs pass 1.
@@ -222,7 +223,59 @@ static bool _is_valid_keypath(
     return true;
 }
 
-static app_btc_sign_error_t _sign_input_pass2(
+static app_btc_sign_error_t _input_sighash(const BTCSignInputRequest* request, uint8_t* sighash)
+{
+    struct ext_key derived_xpub __attribute__((__cleanup__(keystore_zero_xkey))) = {0};
+    if (!keystore_get_xpub(request->keypath, request->keypath_count, &derived_xpub)) {
+        return _error(APP_BTC_SIGN_ERR_UNKNOWN);
+    }
+
+    uint8_t sighash_script[MAX_SIGHASH_SCRIPT_SIZE] = {0};
+    size_t sighash_script_size = sizeof(sighash_script);
+    if (!btc_common_sighash_script_from_pubkeyhash(
+            _script_type, derived_xpub.hash160, sighash_script, &sighash_script_size)) {
+        return _error(APP_BTC_SIGN_ERR_INVALID_INPUT);
+    }
+    // construct hash to sign
+    btc_bip143_sighash(
+        _version,
+        _hash_prevouts,
+        _hash_sequence,
+        request->prevOutHash,
+        request->prevOutIndex,
+        sighash_script,
+        sighash_script_size,
+        request->prevOutValue,
+        request->sequence,
+        _hash_outputs,
+        _locktime,
+        WALLY_SIGHASH_ALL,
+        sighash);
+    return APP_BTC_SIGN_OK;
+}
+
+static app_btc_sign_error_t _sign_input_pass2a(
+    const BTCSignInputRequest* request,
+    BTCSignNextResponse* next_out)
+{
+    // Construct client nonce commitment.
+    uint8_t sighash[32] = {0};
+    app_btc_sign_error_t result = _input_sighash(request, sighash);
+    if (result != APP_BTC_SIGN_OK) {
+        return result;
+    }
+    if (!keystore_nonce_commit(
+            request->data, request->keypath, request->keypath_count, sighash, next_out->data)) {
+        return _error(APP_BTC_SIGN_ERR_UNKNOWN);
+    }
+    // Request same input to sign.
+    _state = STATE_INPUTS_PASS2b;
+    next_out->type = BTCSignNextResponse_Type_INPUT_PASS2b;
+    next_out->index = _index;
+    return APP_BTC_SIGN_OK;
+}
+
+static app_btc_sign_error_t _sign_input_pass2b(
     const BTCSignInputRequest* request,
     BTCSignNextResponse* next_out)
 {
@@ -238,56 +291,29 @@ static app_btc_sign_error_t _sign_input_pass2(
         return _error(APP_BTC_SIGN_ERR_INVALID_INPUT);
     }
 
-    { // Sign input.
-        struct ext_key derived_xpub __attribute__((__cleanup__(keystore_zero_xkey))) = {0};
-        if (!keystore_get_xpub(request->keypath, request->keypath_count, &derived_xpub)) {
-            return _error(APP_BTC_SIGN_ERR_UNKNOWN);
-        }
-
-        uint8_t sighash_script[MAX_SIGHASH_SCRIPT_SIZE] = {0};
-        size_t sighash_script_size = sizeof(sighash_script);
-        if (!btc_common_sighash_script_from_pubkeyhash(
-                _script_type, derived_xpub.hash160, sighash_script, &sighash_script_size)) {
-            return _error(APP_BTC_SIGN_ERR_INVALID_INPUT);
-        }
-        uint8_t sighash[32] = {0};
-        // construct hash to sign
-        btc_bip143_sighash(
-            _version,
-            _hash_prevouts,
-            _hash_sequence,
-            request->prevOutHash,
-            request->prevOutIndex,
-            sighash_script,
-            sighash_script_size,
-            request->prevOutValue,
-            request->sequence,
-            _hash_outputs,
-            _locktime,
-            WALLY_SIGHASH_ALL,
-            sighash);
-        uint8_t sig_out[64] = {0};
-        if (!keystore_sign_secp256k1(request->keypath, request->keypath_count, sighash, sig_out)) {
-            return _error(APP_BTC_SIGN_ERR_UNKNOWN);
-        }
-        // check assumption
-        if (sizeof(next_out->signature) != sizeof(sig_out)) {
-            return _error(APP_BTC_SIGN_ERR_UNKNOWN);
-        }
-        memcpy(next_out->signature, sig_out, sizeof(sig_out));
-        next_out->has_signature = true;
+    // Sign input.
+    uint8_t sighash[32] = {0};
+    app_btc_sign_error_t result = _input_sighash(request, sighash);
+    if (result != APP_BTC_SIGN_OK) {
+        return result;
+    }
+    if (!keystore_sign_secp256k1(
+            request->keypath, request->keypath_count, sighash, request->data, next_out->data)) {
+        return _error(APP_BTC_SIGN_ERR_UNKNOWN);
     }
 
     if (_index < _num_inputs - 1) {
         _index++;
         // Want next input
-        next_out->type = BTCSignNextResponse_Type_INPUT;
+        _state = STATE_INPUTS_PASS2a;
+        next_out->type = BTCSignNextResponse_Type_INPUT_PASS2a;
         next_out->index = _index;
     } else {
         // Done with inputs pass2 -> done completely.
         _reset();
         next_out->type = BTCSignNextResponse_Type_DONE;
     }
+
     return APP_BTC_SIGN_OK;
 }
 
@@ -295,7 +321,8 @@ app_btc_sign_error_t app_btc_sign_input(
     const BTCSignInputRequest* request,
     BTCSignNextResponse* next_out)
 {
-    if (_state != STATE_INPUTS_PASS1 && _state != STATE_INPUTS_PASS2) {
+    if (_state != STATE_INPUTS_PASS1 && _state != STATE_INPUTS_PASS2a &&
+        _state != STATE_INPUTS_PASS2b) {
         return _error(APP_BTC_SIGN_ERR_STATE);
     }
     if (request->sequence != 0xffffffff) {
@@ -313,10 +340,16 @@ app_btc_sign_error_t app_btc_sign_input(
             false)) {
         return _error(APP_BTC_SIGN_ERR_INVALID_INPUT);
     }
-    if (_state == STATE_INPUTS_PASS1) {
+    switch (_state) {
+    case STATE_INPUTS_PASS1:
         return _sign_input_pass1(request, next_out);
+    case STATE_INPUTS_PASS2a:
+        return _sign_input_pass2a(request, next_out);
+    case STATE_INPUTS_PASS2b:
+        return _sign_input_pass2b(request, next_out);
+    default:
+        return _error(APP_BTC_SIGN_ERR_STATE);
     }
-    return _sign_input_pass2(request, next_out);
 }
 
 app_btc_sign_error_t app_btc_sign_output(
@@ -450,9 +483,9 @@ app_btc_sign_error_t app_btc_sign_output(
         _sha256(_hash_outputs, 32, _hash_outputs);
 
         // Want first input of pass2
-        _state = STATE_INPUTS_PASS2;
+        _state = STATE_INPUTS_PASS2a;
         _index = 0;
-        next_out->type = BTCSignNextResponse_Type_INPUT;
+        next_out->type = BTCSignNextResponse_Type_INPUT_PASS2a;
         next_out->index = _index;
     }
     return APP_BTC_SIGN_OK;

@@ -25,9 +25,10 @@ BTCPubRequest.keypath max_count:10
 PubResponse.pub max_size:500
 BTCSignInputRequest.prevOutHash fixed_length:true max_size:32
 BTCSignInputRequest.keypath max_count:10
+BTCSignInputRequest.data fixed_length:true max_size:32
 BTCSignOutputRequest.hash max_size:32
 BTCSignOutputRequest.keypath max_count:10
-BTCSignNextResponse.signature fixed_length:true max_size:64
+BTCSignNextResponse.data fixed_length:true max_size:64
 // One backup per seed -> 100 seeds may be backed up per SD card. Adapt this number if it is too small.
 ListBackupsResponse.info fixed_length:true max_count:100
 RestoreBackupRequest.id fixed_length:true max_size:256
@@ -40,3 +41,5 @@ PerformAttestationResponse.device_pubkey fixed_length:true max_size:64
 PerformAttestationResponse.certificate fixed_length:true max_size:64
 PerformAttestationResponse.root_pubkey_identifier fixed_length:true max_size:32
 PerformAttestationResponse.challenge_signature fixed_length:true max_size:64
+SignHostNonceRequest.data fixed_length:true max_size:32
+SignNonceCommitResponse.client_nonce_commitment fixed_length:true max_size:33
