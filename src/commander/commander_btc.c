@@ -128,7 +128,9 @@ commander_error_t commander_btc_sign(const Request* request, Response* response)
         return COMMANDER_ERR_GENERIC;
     }
     switch (response->response.btc_sign_next.type) {
-    case BTCSignNextResponse_Type_INPUT:
+    case BTCSignNextResponse_Type_INPUT_PASS1:
+    case BTCSignNextResponse_Type_INPUT_PASS2_COMMIT:
+    case BTCSignNextResponse_Type_INPUT_PASS2_SIGN:
         commander_states_force_next(Request_btc_sign_input_tag);
         break;
     case BTCSignNextResponse_Type_OUTPUT:
