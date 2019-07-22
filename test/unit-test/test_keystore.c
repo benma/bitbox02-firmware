@@ -19,9 +19,11 @@
 
 #include <keystore.h>
 #include <secp256k1_recovery.h>
+#include <secp256k1_ecdsa_sign_to_contract.h>
 #include <securechip/securechip.h>
 #include <util.h>
 
+#include <wally_bip32.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -46,6 +48,19 @@ static uint8_t _mock_bip39_seed[64] = {
     0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44,
     0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22,
     0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44,
+};
+
+static uint32_t _keypath[] = {
+    44 + BIP32_INITIAL_HARDENED_CHILD,
+    0 + BIP32_INITIAL_HARDENED_CHILD,
+    0 + BIP32_INITIAL_HARDENED_CHILD,
+    0,
+    5,
+};
+
+const uint8_t _expected_seckey[32] = {
+    0x4e, 0x64, 0xdf, 0xd3, 0x3a, 0xae, 0x66, 0xc4, 0xc7, 0x52, 0x6c, 0xf0, 0x2e, 0xe8, 0xae, 0x3f,
+    0x58, 0x92, 0x32, 0x9d, 0x67, 0xdf, 0xd4, 0xad, 0x05, 0xe9, 0xc3, 0xd0, 0x6e, 0xdf, 0x74, 0xfb,
 };
 
 static uint8_t _password_salted_hashed_stretch_in[32] = {
@@ -78,25 +93,37 @@ static uint8_t _kdf_out_3[32] = {
     0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33,
 };
 
-int __real_secp256k1_ecdsa_sign_recoverable(
+static uint8_t _msg[32] = {
+    0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88,
+    0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88,
+};
+
+int __real_secp256k1_ecdsa_s2c_sign(
     const secp256k1_context* ctx,
-    secp256k1_ecdsa_recoverable_signature* sig,
+    secp256k1_ecdsa_signature* sig,
+    secp256k1_s2c_opening* s2c_opening,
+    int* recid,
     const unsigned char* msg32,
     const unsigned char* seckey,
+    const unsigned char* s2c_data32,
     secp256k1_nonce_function noncefp,
     const void* ndata);
 
-int __wrap_secp256k1_ecdsa_sign_recoverable(
+int __wrap_secp256k1_ecdsa_s2c_sign(
     const secp256k1_context* ctx,
-    secp256k1_ecdsa_recoverable_signature* sig,
+    secp256k1_ecdsa_signature* sig,
+    secp256k1_s2c_opening* s2c_opening,
+    int* recid,
     const unsigned char* msg32,
     const unsigned char* seckey,
+    const unsigned char* s2c_data32,
     secp256k1_nonce_function noncefp,
     const void* ndata)
 {
     check_expected(msg32);
     check_expected(seckey);
-    return __real_secp256k1_ecdsa_sign_recoverable(ctx, sig, msg32, seckey, noncefp, ndata);
+    return __real_secp256k1_ecdsa_s2c_sign(
+        ctx, sig, s2c_opening, recid, msg32, seckey, s2c_data32, noncefp, ndata);
 }
 
 bool __wrap_salt_hash_data(
@@ -144,43 +171,29 @@ static bool _get_pubkey(const uint32_t* keypath, size_t keypath_len, secp256k1_p
         wally_get_secp_context(), out, xpub.pub_key, sizeof(xpub.pub_key));
 }
 
-static void _test_keystore_sign_secp256k1(void** state)
+static void _test_keystore_secp256k1_sign(void** state)
 {
-    uint32_t keypath[] = {
-        44 + BIP32_INITIAL_HARDENED_CHILD,
-        0 + BIP32_INITIAL_HARDENED_CHILD,
-        0 + BIP32_INITIAL_HARDENED_CHILD,
-        0,
-        5,
-    };
-    uint8_t msg[32] = {0};
-    memset(msg, 0x88, sizeof(msg));
     uint8_t sig[64] = {0};
     secp256k1_context* ctx = wally_get_secp_context();
-
+    uint8_t host_nonce[32] = {0};
     {
         // fails because keystore is locked
-        assert_false(
-            keystore_secp256k1_sign(keypath, sizeof(keypath) / sizeof(uint32_t), msg, sig, NULL));
+        assert_false(keystore_secp256k1_sign(
+            _keypath, sizeof(_keypath) / sizeof(uint32_t), _msg, host_nonce, sig, NULL));
     }
     {
         mock_state(_mock_seed, _mock_bip39_seed);
         // check derivation with a fixture
-        const uint8_t expected_seckey[32] = {
-            0x4e, 0x64, 0xdf, 0xd3, 0x3a, 0xae, 0x66, 0xc4, 0xc7, 0x52, 0x6c,
-            0xf0, 0x2e, 0xe8, 0xae, 0x3f, 0x58, 0x92, 0x32, 0x9d, 0x67, 0xdf,
-            0xd4, 0xad, 0x05, 0xe9, 0xc3, 0xd0, 0x6e, 0xdf, 0x74, 0xfb,
-        };
-        expect_memory(__wrap_secp256k1_ecdsa_sign_recoverable, seckey, expected_seckey, 32);
-        expect_memory(__wrap_secp256k1_ecdsa_sign_recoverable, msg32, msg, sizeof(msg));
+        expect_memory(__wrap_secp256k1_ecdsa_s2c_sign, seckey, _expected_seckey, 32);
+        expect_memory(__wrap_secp256k1_ecdsa_s2c_sign, msg32, _msg, sizeof(_msg));
         // check sig by verifying it against the msg.
-        assert_true(
-            keystore_secp256k1_sign(keypath, sizeof(keypath) / sizeof(uint32_t), msg, sig, NULL));
+        assert_true(keystore_secp256k1_sign(
+            _keypath, sizeof(_keypath) / sizeof(uint32_t), _msg, host_nonce, sig, NULL));
         secp256k1_pubkey pubkey = {0};
-        assert_true(_get_pubkey(keypath, sizeof(keypath) / sizeof(uint32_t), &pubkey));
+        assert_true(_get_pubkey(_keypath, sizeof(_keypath) / sizeof(uint32_t), &pubkey));
         secp256k1_ecdsa_signature secp256k1_sig = {0};
         assert_true(secp256k1_ecdsa_signature_parse_compact(ctx, &secp256k1_sig, sig));
-        assert_true(secp256k1_ecdsa_verify(ctx, &secp256k1_sig, msg, &pubkey));
+        assert_true(secp256k1_ecdsa_verify(ctx, &secp256k1_sig, _msg, &pubkey));
     }
 }
 
@@ -317,7 +330,7 @@ static void _test_keystore_lock(void** state)
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test(_test_keystore_sign_secp256k1),
+        cmocka_unit_test(_test_keystore_secp256k1_sign),
         cmocka_unit_test(_test_keystore_encrypt_and_store_seed),
         cmocka_unit_test(_test_keystore_unlock),
         cmocka_unit_test(_test_keystore_lock),

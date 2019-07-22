@@ -274,7 +274,7 @@ static app_btc_sign_error_t _sign_input_pass2(
             sighash);
         uint8_t sig_out[64] = {0};
         if (!keystore_secp256k1_sign(
-                request->keypath, request->keypath_count, sighash, sig_out, NULL)) {
+                request->keypath, request->keypath_count, sighash, NULL, sig_out, NULL)) {
             return _error(APP_BTC_SIGN_ERR_UNKNOWN);
         }
         // check assumption
