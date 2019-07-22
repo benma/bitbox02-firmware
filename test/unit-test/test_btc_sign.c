@@ -79,7 +79,7 @@ static void _test_btc_sign_init(void** state)
     BTCSignNextResponse next = {0};
     { // test valid
         assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_init(&init_req_valid, &next));
-        assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT);
+        assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT_PASS1);
         assert_int_equal(next.index, 0);
     }
     { // test invalid version
@@ -167,6 +167,20 @@ typedef struct {
     bool overflow_output_ours;
 } _modification_t;
 
+static app_btc_sign_error_t _app_btc_sign_input(
+    const BTCSignInputRequest_Input* input,
+    BTCSignNextResponse* next_out)
+{
+    BTCSignInputRequest request = {
+        .which_request = BTCSignInputRequest_input_tag,
+        .request =
+            {
+                .input = *input,
+            },
+    };
+    return app_btc_sign_input(&request, next_out);
+}
+
 // _sign goes through the whole sign process of an example tx, successfully.
 // The passed params malleate the behavior to induce expected failures.
 static void _sign(const _modification_t* mod)
@@ -184,7 +198,7 @@ static void _sign(const _modification_t* mod)
         .locktime = 0,
     };
 
-    BTCSignInputRequest inputs[2] = {
+    BTCSignInputRequest_Input inputs[2] = {
         {
             .prevOutHash =
                 {
@@ -204,6 +218,12 @@ static void _sign(const _modification_t* mod)
                     0,
                     5,
                 },
+            .host_nonce_commitment = // sha256(b'a'*32)
+            {
+                0x3b, 0xa3, 0xf5, 0xf4, 0x3b, 0x92, 0x60, 0x26, 0x83, 0xc1, 0x9a,
+                0xee, 0x62, 0xa2, 0x03, 0x42, 0xb0, 0x84, 0xdd, 0x59, 0x71, 0xdd,
+                0xd3, 0x38, 0x08, 0xd8, 0x1a, 0x32, 0x88, 0x79, 0xa5, 0x47,
+            },
         },
         {
             .prevOutHash =
@@ -224,6 +244,12 @@ static void _sign(const _modification_t* mod)
                     0,
                     7,
                 },
+            .host_nonce_commitment = // sha256(b'b'*32)
+            {
+                0xbd, 0xb3, 0x39, 0x76, 0x8b, 0xc5, 0xe4, 0xfe, 0xcb, 0xe5, 0x5a,
+                0x44, 0x20, 0x56, 0x91, 0x9b, 0x2b, 0x32, 0x59, 0x07, 0xd4, 0x9b,
+                0xcb, 0xf3, 0xbf, 0x8d, 0xe1, 0x37, 0x81, 0x99, 0x6a, 0x83,
+            },
         },
     };
 
@@ -351,9 +377,8 @@ static void _sign(const _modification_t* mod)
 
     BTCSignNextResponse next = {0};
     assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_init(&init_req, &next));
-    assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT);
+    assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT_PASS1);
     assert_int_equal(next.index, 0);
-    assert_false(next.has_signature);
 
     if (mod->state_init_after_init) {
         assert_int_equal(APP_BTC_SIGN_ERR_STATE, app_btc_sign_init(&init_req, &next));
@@ -369,23 +394,21 @@ static void _sign(const _modification_t* mod)
     // First input, pass1.
     if (mod->wrong_coin_input || mod->wrong_account_input || mod->wrong_sequence_number ||
         mod->wrong_input_value) {
-        assert_int_equal(APP_BTC_SIGN_ERR_INVALID_INPUT, app_btc_sign_input(&inputs[0], &next));
+        assert_int_equal(APP_BTC_SIGN_ERR_INVALID_INPUT, _app_btc_sign_input(&inputs[0], &next));
         return;
     }
-    assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_input(&inputs[0], &next));
-    assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT);
+    assert_int_equal(APP_BTC_SIGN_OK, _app_btc_sign_input(&inputs[0], &next));
+    assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT_PASS1);
     assert_int_equal(next.index, 1);
-    assert_false(next.has_signature);
 
     // Second input, pass1.
     if (mod->overflow_input_values_pass1) {
-        assert_int_equal(APP_BTC_SIGN_ERR_INVALID_INPUT, app_btc_sign_input(&inputs[1], &next));
+        assert_int_equal(APP_BTC_SIGN_ERR_INVALID_INPUT, _app_btc_sign_input(&inputs[1], &next));
         return;
     }
-    assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_input(&inputs[1], &next));
+    assert_int_equal(APP_BTC_SIGN_OK, _app_btc_sign_input(&inputs[1], &next));
     assert_int_equal(next.type, BTCSignNextResponse_Type_OUTPUT);
     assert_int_equal(next.index, 0);
-    assert_false(next.has_signature);
 
     // === Outputs
 
@@ -404,7 +427,6 @@ static void _sign(const _modification_t* mod)
     assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_output(&outputs[0], &next));
     assert_int_equal(next.type, BTCSignNextResponse_Type_OUTPUT);
     assert_int_equal(next.index, 1);
-    assert_false(next.has_signature);
 
     // Second output
     if (mod->overflow_output_out) {
@@ -427,7 +449,6 @@ static void _sign(const _modification_t* mod)
     assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_output(&outputs[1], &next));
     assert_int_equal(next.type, BTCSignNextResponse_Type_OUTPUT);
     assert_int_equal(next.index, 2);
-    assert_false(next.has_signature);
 
     // Third output
     expect_value(__wrap_btc_common_format_amount, satoshi, outputs[2].value);
@@ -440,7 +461,6 @@ static void _sign(const _modification_t* mod)
     assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_output(&outputs[2], &next));
     assert_int_equal(next.type, BTCSignNextResponse_Type_OUTPUT);
     assert_int_equal(next.index, 3);
-    assert_false(next.has_signature);
 
     // Fourth output
     expect_value(__wrap_btc_common_format_amount, satoshi, outputs[3].value);
@@ -455,7 +475,6 @@ static void _sign(const _modification_t* mod)
     assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_output(&outputs[3], &next));
     assert_int_equal(next.type, BTCSignNextResponse_Type_OUTPUT);
     assert_int_equal(next.index, 4);
-    assert_false(next.has_signature);
 
     // Fifth output, change. Last output also invokes verification of total and
     // fee.
@@ -470,7 +489,6 @@ static void _sign(const _modification_t* mod)
     assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_output(&outputs[4], &next));
     assert_int_equal(next.type, BTCSignNextResponse_Type_OUTPUT);
     assert_int_equal(next.index, 5);
-    assert_false(next.has_signature);
 
     // Sixth output, change. Last output also invokes verification of total and
     // fee.
@@ -490,13 +508,12 @@ static void _sign(const _modification_t* mod)
     if (mod->user_aborts_total) {
         assert_int_equal(APP_BTC_SIGN_ERR_USER_ABORT, app_btc_sign_output(&outputs[5], &next));
         // Check the process is really aborted, can't proceed to next stage.
-        assert_int_equal(APP_BTC_SIGN_ERR_STATE, app_btc_sign_input(&inputs[0], &next));
+        assert_int_equal(APP_BTC_SIGN_ERR_STATE, _app_btc_sign_input(&inputs[0], &next));
         return;
     }
     assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_output(&outputs[5], &next));
-    assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT);
+    assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT_PASS2_COMMIT);
     assert_int_equal(next.index, 0);
-    assert_false(next.has_signature);
 
     // === Inputs Pass 2
 
@@ -511,23 +528,52 @@ static void _sign(const _modification_t* mod)
     }
 
     // First input, pass2.
+    // a) nonce commitment
     if (mod->input_sum_changes) {
-        assert_int_equal(APP_BTC_SIGN_ERR_INVALID_INPUT, app_btc_sign_input(&inputs[0], &next));
+        assert_int_equal(APP_BTC_SIGN_ERR_INVALID_INPUT, _app_btc_sign_input(&inputs[0], &next));
         return;
     }
-    assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_input(&inputs[0], &next));
-    assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT);
+    assert_int_equal(APP_BTC_SIGN_OK, _app_btc_sign_input(&inputs[0], &next));
+    assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT_PASS2_SIGN);
+    assert_int_equal(next.index, 0);
+
+    // b) sign
+    const BTCSignInputRequest sign_request0 = {
+        .which_request = BTCSignInputRequest_sign_tag,
+        .request =
+            {
+                .sign =
+                    {
+                        .host_nonce = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    },
+            },
+    };
+    assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_input(&sign_request0, &next));
+    assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT_PASS2_COMMIT);
     assert_int_equal(next.index, 1);
-    assert_true(next.has_signature);
 
     // Second input, pass2.
+    // a) nonce commitment
     if (mod->input_sum_last_mismatch || mod->overflow_input_values_pass2) {
-        assert_int_equal(APP_BTC_SIGN_ERR_INVALID_INPUT, app_btc_sign_input(&inputs[1], &next));
+        assert_int_equal(APP_BTC_SIGN_ERR_INVALID_INPUT, _app_btc_sign_input(&inputs[1], &next));
         return;
     }
-    assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_input(&inputs[1], &next));
+    assert_int_equal(APP_BTC_SIGN_OK, _app_btc_sign_input(&inputs[1], &next));
+    assert_int_equal(next.type, BTCSignNextResponse_Type_INPUT_PASS2_SIGN);
+    assert_int_equal(next.index, 1);
+    // b) sign
+    const BTCSignInputRequest sign_request1 = {
+        .which_request = BTCSignInputRequest_sign_tag,
+        .request =
+            {
+                .sign =
+                    {
+                        .host_nonce = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    },
+            },
+    };
+    assert_int_equal(APP_BTC_SIGN_OK, app_btc_sign_input(&sign_request1, &next));
     assert_int_equal(next.type, BTCSignNextResponse_Type_DONE);
-    assert_true(next.has_signature);
 }
 
 static const _modification_t _valid = {

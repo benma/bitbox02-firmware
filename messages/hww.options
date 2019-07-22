@@ -23,11 +23,12 @@ SetDeviceLanguageRequest.language fixed_length:true max_size:5
 Error.message max_size:255
 BTCPubRequest.keypath max_count:10
 PubResponse.pub max_size:500
-BTCSignInputRequest.prevOutHash fixed_length:true max_size:32
-BTCSignInputRequest.keypath max_count:10
+BTCSignInputRequest.Input.prevOutHash fixed_length:true max_size:32
+BTCSignInputRequest.Input.keypath max_count:10
+BTCSignInputRequest.Input.host_nonce_commitment fixed_length:true max_size:32
 BTCSignOutputRequest.hash max_size:32
 BTCSignOutputRequest.keypath max_count:10
-BTCSignNextResponse.signature fixed_length:true max_size:64
+BTCSignNextResponse.data fixed_length:true max_size:65
 // One backup per seed -> 100 seeds may be backed up per SD card. Adapt this number if it is too small.
 ListBackupsResponse.info fixed_length:true max_count:100
 RestoreBackupRequest.id fixed_length:true max_size:256
@@ -49,3 +50,4 @@ ETHSignRequest.recipient fixed_length:true max_size:20
 ETHSignRequest.value max_size:32
 ETHSignRequest.data max_size:100
 ETHSignResponse.signature fixed_length:true max_size:65
+SignRequest.host_nonce fixed_length:true max_size:32
