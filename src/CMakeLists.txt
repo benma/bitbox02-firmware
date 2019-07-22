@@ -31,6 +31,7 @@ set(DBB-FIRMWARE-SOURCES
     ${CMAKE_SOURCE_DIR}/src/commander/commander_btc.c
     ${CMAKE_SOURCE_DIR}/src/commander/commander_states.c
     ${CMAKE_SOURCE_DIR}/src/keystore.c
+    ${CMAKE_SOURCE_DIR}/src/keystore/keystore_nonce.c
     ${CMAKE_SOURCE_DIR}/src/random.c
     ${CMAKE_SOURCE_DIR}/src/attestation.c
     ${CMAKE_SOURCE_DIR}/src/hardfault.c

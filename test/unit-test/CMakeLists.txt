@@ -102,6 +102,10 @@ add_executable(test_keystore test_keystore.c)
 target_link_libraries(test_keystore bitbox cmocka "-Wl,--wrap=secp256k1_ecdsa_s2c_sign,--wrap=memory_is_initialized,--wrap=memory_is_seeded,--wrap=memory_get_failed_unlock_attempts,--wrap=memory_reset_failed_unlock_attempts,--wrap=memory_increment_failed_unlock_attempts,--wrap=memory_set_encrypted_seed_and_hmac,--wrap=memory_get_encrypted_seed_and_hmac,--wrap=reset_reset,--wrap=salt_hash_data,--wrap=cipher_aes_hmac_encrypt")
 add_test(NAME test_keystore COMMAND test_keystore)
 
+add_executable(test_keystore_nonce test_keystore_nonce.c)
+target_link_libraries(test_keystore_nonce bitbox cmocka "-Wl,--wrap=keystore_secp256k1_nonce_commit,--wrap=keystore_secp256k1_sign")
+add_test(NAME test_keystore_nonce COMMAND test_keystore_nonce)
+
 add_executable(test_gestures test_gestures.c)
 target_link_libraries(test_gestures bitbox cmocka)
 add_test(NAME test_gestures COMMAND test_gestures)
