@@ -48,14 +48,22 @@ void workflow_confirm_dismiss(const char* title, const char* body)
 {
     ui_screen_stack_switch(confirm_create(title, body, false, _confirm_dismiss, NULL));
 }
-
+#include "workflow/password_enter.h"
 static void _select_orientation_done(bool upside_down)
 {
     if (upside_down) {
         screen_rotate();
     }
-    component_t* show_logo = show_logo_create(workflow_start, 200);
-    ui_screen_stack_switch(show_logo);
+    char out[100] = {0};
+    while (1) {
+        if (!password_enter("Enter password", out)) {
+            Abort("error");
+        }
+        screen_sprintf_debug(2000, "Chosen (%d)\n%s", strlens(out), out);
+    }
+
+    /* component_t* show_logo = show_logo_create(workflow_start, 200); */
+    /* ui_screen_stack_switch(show_logo); */
 }
 
 void workflow_start(void)

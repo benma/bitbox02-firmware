@@ -30,8 +30,8 @@ static void _on_event(const event_t* event, component_t* component)
 {
     entry_screen_data_t* data = (entry_screen_data_t*)component->data;
     switch (event->id) {
-    case EVENT_BOTTOM_CONTINUOUS_TAP:
-    case EVENT_BOTTOM_SLIDE:
+    case EVENT_BOTTOM_SHORT_TAP:
+    case EVENT_BOTTOM_SLIDE_RELEASED:
         data->done_callback();
         break;
     default:

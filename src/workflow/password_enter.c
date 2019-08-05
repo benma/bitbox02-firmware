@@ -16,6 +16,7 @@
 #include "blocking.h"
 
 #include <hardfault.h>
+#include <keystore.h>
 #include <ui/components/ui_components.h>
 #include <ui/screen_process.h>
 #include <ui/screen_stack.h>
@@ -41,7 +42,16 @@ bool password_enter(const char* title, char* password_out)
         ui_screen_stack_pop();
         return false;
     }
-    ui_screen_stack_switch(set_password_create(_pw_entered));
+    // ui_screen_stack_switch(set_password_create(_pw_entered));
+    // const char* const word[4] = {"lol", "lal", "loll", "rofl"};
+    size_t wordlist_size = keystore_get_bip39_wordlist_length();
+    char* words[wordlist_size];
+    for (size_t i = 0; i < wordlist_size; i++) {
+        if (!keystore_get_bip39_word(i, &words[i])) {
+        }
+    }
+    ui_screen_stack_switch(trinary_input_string_create_wordlist(
+        (const char* const*)words, wordlist_size, _pw_entered));
     bool result = workflow_blocking_block();
     ui_screen_stack_pop();
     if (!result) {
