@@ -23,6 +23,8 @@
 #include <securechip/securechip.h>
 #include <util.h>
 
+#include <wally_crypto.h>
+
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -98,6 +100,8 @@ int __real_secp256k1_ecdsa_s2c_sign(
 
 static const unsigned char* _sign_expected_msg = NULL;
 static const unsigned char* _sign_expected_seckey = NULL;
+static bool _sign_has_opening = false;
+static secp256k1_s2c_opening _sign_opening;
 int __wrap_secp256k1_ecdsa_s2c_sign(
     const secp256k1_context* ctx,
     secp256k1_ecdsa_signature* sig,
@@ -115,7 +119,16 @@ int __wrap_secp256k1_ecdsa_s2c_sign(
         assert_memory_equal(_sign_expected_seckey, seckey, 32);
         _sign_expected_seckey = NULL;
     }
-    return __real_secp256k1_ecdsa_s2c_sign(ctx, sig, s2c_opening, msg32, seckey, s2c_data32, recid);
+    _sign_has_opening = s2c_opening != NULL;
+    int result =
+        __real_secp256k1_ecdsa_s2c_sign(ctx, sig, s2c_opening, msg32, seckey, s2c_data32, recid);
+    if (!result) {
+        return result;
+    }
+    if (_sign_has_opening) {
+        memcpy(&_sign_opening, s2c_opening, sizeof(secp256k1_s2c_opening));
+    }
+    return result;
 }
 
 bool __wrap_salt_hash_data(
@@ -380,6 +393,56 @@ static void _test_keystore_lock(void** state)
     assert_true(keystore_is_locked());
 }
 
+static void _test_keystore_secp256k1_nonce_commit(void** state)
+{
+    uint8_t host_nonce[32];
+    memset(host_nonce, 0x45, sizeof(host_nonce));
+
+    // get client commitment based on sha256(host_nonce)
+    uint8_t host_nonce_commitment[32];
+    wally_sha256(host_nonce, sizeof(host_nonce), host_nonce_commitment, 32);
+
+    uint8_t client_commitment[65];
+
+    const uint8_t msg[32] = {
+        0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88,
+        0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88,
+        0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88,
+    };
+
+    // fails because keystore is locked
+    assert_false(keystore_secp256k1_nonce_commit(
+        _keypath,
+        sizeof(_keypath) / sizeof(uint32_t),
+        msg,
+        host_nonce_commitment,
+        client_commitment));
+
+    mock_state(_mock_seed, _mock_bip39_seed);
+    assert_true(keystore_secp256k1_nonce_commit(
+        _keypath,
+        sizeof(_keypath) / sizeof(uint32_t),
+        msg,
+        host_nonce_commitment,
+        client_commitment));
+
+    // sign using host nonce
+    uint8_t sig[64] = {0};
+    assert_true(keystore_secp256k1_sign(
+        _keypath, sizeof(_keypath) / sizeof(uint32_t), msg, host_nonce, sig, NULL));
+
+    // Verify that the host nonce is part of the signature.
+    secp256k1_context* ctx = wally_get_secp_context();
+    secp256k1_ecdsa_signature secp256k1_sig = {0};
+    assert_true(secp256k1_ecdsa_signature_parse_compact(ctx, &secp256k1_sig, sig));
+    secp256k1_pubkey client_commitment_pubkey;
+    assert_true(secp256k1_ec_pubkey_parse(
+        ctx, &client_commitment_pubkey, client_commitment, sizeof(client_commitment)));
+    assert_true(_sign_has_opening);
+    assert_true(secp256k1_ecdsa_s2c_anti_nonce_covert_channel_host_verify(
+        ctx, &secp256k1_sig, host_nonce, &_sign_opening, &client_commitment_pubkey));
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -388,6 +451,7 @@ int main(void)
         cmocka_unit_test(_test_keystore_encrypt_and_store_seed),
         cmocka_unit_test(_test_keystore_unlock),
         cmocka_unit_test(_test_keystore_lock),
+        cmocka_unit_test(_test_keystore_secp256k1_nonce_commit),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

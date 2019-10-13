@@ -554,6 +554,44 @@ bool keystore_secp256k1_pubkey(
     return true;
 }
 
+bool keystore_secp256k1_nonce_commit(
+    const uint32_t* keypath,
+    size_t keypath_len,
+    const uint8_t* msg32,
+    const uint8_t* host_commitment,
+    uint8_t* client_commitment_out)
+{
+    if (keystore_is_locked()) {
+        return false;
+    }
+    struct ext_key xprv __attribute__((__cleanup__(keystore_zero_xkey))) = {0};
+    if (!_get_xprv_twice(keypath, keypath_len, &xprv)) {
+        return false;
+    }
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+    // The function expects non-const, but we know it won't modify the argument.
+    uint8_t* cast = (uint8_t*)host_commitment;
+#pragma GCC diagnostic pop
+    secp256k1_context* ctx = wally_get_secp_context();
+    secp256k1_pubkey client_commitment;
+    if (!secp256k1_ecdsa_s2c_anti_nonce_covert_channel_client_commit(
+            ctx,
+            &client_commitment,
+            msg32,
+            xprv.priv_key + 1, // first byte is 0,
+            cast)) {
+        return false;
+    }
+
+    size_t outlen = 65;
+    if (!secp256k1_ec_pubkey_serialize(
+            ctx, client_commitment_out, &outlen, &client_commitment, SECP256K1_EC_UNCOMPRESSED)) {
+        return false;
+    }
+    return true;
+}
+
 bool keystore_secp256k1_sign(
     const uint32_t* keypath,
     size_t keypath_len,

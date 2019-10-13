@@ -172,6 +172,23 @@ USE_RESULT bool keystore_secp256k1_pubkey(
     size_t pubkey_out_len);
 
 /**
+ * Get a commitment to the original nonce before tweaking it with the host nonce. This is part of
+ * the ECDSA Anti Nonce Covert Channel Protocol. For more details, check the docs of
+ * `secp256k1_ecdsa_s2c_anti_nonce_covert_channel_client_commit`.
+ * @param[in] keypath derivation keypath
+ * @param[in] keypath_len size of keypath buffer
+ * @param[in] msg32 32 byte message which will be signed by `keystore_secp256k1_sign`.
+ * @param[in] host_commitment must be sha256(host_nonce) where host_nonce is passed to
+ * `keystore_secp256k1_sign` in a second step.
+ */
+USE_RESULT bool keystore_secp256k1_nonce_commit(
+    const uint32_t* keypath,
+    size_t keypath_len,
+    const uint8_t* msg32,
+    const uint8_t* host_commitment,
+    uint8_t* client_commitment_out);
+
+/**
  * Sign message with private key at the given keypath. Keystore must be unlocked.
  * @param[in] keypath derivation keypath
  * @param[in] keypath_len size of keypath buffer
