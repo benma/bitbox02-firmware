@@ -80,7 +80,7 @@ app_eth_sign_error_t app_eth_sign(const ETHSignRequest* request, ETHSignResponse
     }
     int recid;
     if (!keystore_secp256k1_sign(
-            request->keypath, request->keypath_count, sighash, response->signature, &recid)) {
+            request->keypath, request->keypath_count, sighash, NULL, response->signature, &recid)) {
         return APP_ETH_SIGN_ERR_UNKNOWN;
     }
     if (recid > 0xFF) {
