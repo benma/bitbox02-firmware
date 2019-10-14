@@ -31,6 +31,7 @@ import semver
 
 import u2fhid
 from .devices import parse_device_version, DeviceInfo
+from .secp256k1 import anti_nonce_covert_channel_verify
 
 try:
     from .generated import hww_pb2 as hww
@@ -471,27 +472,60 @@ class BitBox02:
                 locktime=locktime,
             )
         )
+
+        def query_input(input_index: int, host_nonce_commitment: bytes) -> hww.BTCSignNextResponse:
+            tx_input = inputs[input_index]
+            request = hww.Request()
+            request.btc_sign_input.input.CopyFrom(
+                hww.BTCSignInputRequest.Input(
+                    prevOutHash=tx_input["prev_out_hash"],
+                    prevOutIndex=tx_input["prev_out_index"],
+                    prevOutValue=tx_input["prev_out_value"],
+                    sequence=tx_input["sequence"],
+                    keypath=tx_input["keypath"],
+                    host_nonce_commitment=host_nonce_commitment,
+                )
+            )
+
+            return self._msg_query(request, expected_response="btc_sign_next").btc_sign_next
+
         next_response = self._msg_query(request, expected_response="btc_sign_next").btc_sign_next
         while True:
-            if next_response.type == hww.BTCSignNextResponse.INPUT:
+            if next_response.type == hww.BTCSignNextResponse.INPUT_PASS1:
+                next_response = query_input(next_response.index, b"")
+            elif next_response.type == hww.BTCSignNextResponse.INPUT_PASS2_COMMIT:
                 input_index = next_response.index
-                tx_input = inputs[input_index]
+                nonce = os.urandom(32)
+                host_nonce_commitment = hashlib.sha256(nonce).digest()
+                # Every input is processed twice in a row. First call
+                # to exchange nonce commitments, the 2nd to get the
+                # signature and verify that the host nonce was used by
+                # the signer.
 
+                # a) nonce commitment
+                next_response = query_input(input_index, host_nonce_commitment)
+                client_nonce_commitment = next_response.data[:65]
+
+                # Enforce revealing nonce only after receiving client commitment
+                if (
+                    next_response.type != hww.BTCSignNextResponse.INPUT_PASS2_SIGN
+                    or next_response.index != input_index
+                ):
+                    raise Exception("unexpected response")
+
+                # b) signature
                 request = hww.Request()
-                request.btc_sign_input.CopyFrom(
-                    hww.BTCSignInputRequest(
-                        prevOutHash=tx_input["prev_out_hash"],
-                        prevOutIndex=tx_input["prev_out_index"],
-                        prevOutValue=tx_input["prev_out_value"],
-                        sequence=tx_input["sequence"],
-                        keypath=tx_input["keypath"],
-                    )
-                )
+                request.btc_sign_input.sign.CopyFrom(hww.SignRequest(host_nonce=nonce))
                 next_response = self._msg_query(
                     request, expected_response="btc_sign_next"
                 ).btc_sign_next
-                if next_response.has_signature:
-                    sigs.append((input_index, next_response.signature))
+
+                signature = next_response.data[:64]
+                # Raises an exception if the verification fails
+                if self.debug:
+                    print(f"For input {input_index}, the host contributed the nonce {nonce.hex()}")
+                anti_nonce_covert_channel_verify(nonce, client_nonce_commitment, signature)
+                sigs.append((input_index, signature))
             elif next_response.type == hww.BTCSignNextResponse.OUTPUT:
                 output_index = next_response.index
                 tx_output = outputs[output_index]
