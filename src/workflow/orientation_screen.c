@@ -62,7 +62,7 @@ static void _orientation_screen_cleanup(workflow_t* self)
     ui_screen_stack_cleanup();
 }
 
-static void _orientation_screen_spin(workflow_t* self)
+static bool _orientation_screen_spin(workflow_t* self)
 {
     orientation_screen_data_t* data = self->data;
     if (data->finished) {
@@ -72,6 +72,7 @@ static void _orientation_screen_spin(workflow_t* self)
         workflow_stack_stop_workflow();
         workflow_stack_start_workflow(idle_workflow());
     }
+    return false;
 }
 #endif
 

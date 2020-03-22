@@ -53,15 +53,16 @@ static void _workflow_status_cleanup(workflow_t* self)
     free(data->msg);
 }
 
-static void _workflow_status_spin(workflow_t* self)
+static bool _workflow_status_spin(workflow_t* self)
 {
     data_t* data = (data_t*)self->data;
     if (data->finished) {
         if (data->callback) {
             data->callback(data->callback_param);
         }
-        workflow_stack_stop_workflow();
+        return true;
     }
+    return false;
 }
 
 workflow_t* workflow_status(

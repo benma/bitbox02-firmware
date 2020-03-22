@@ -52,7 +52,7 @@ static void _idle_workflow_init_communication(void)
     ui_screen_stack_push(info_centered_create("See the BitBoxApp", NULL));
 }
 
-static void _idle_workflow_spin(workflow_t* self)
+static bool _idle_workflow_spin(workflow_t* self)
 {
     idle_workflow_data_t* data = self->data;
     if (!data->initialized) {
@@ -62,6 +62,7 @@ static void _idle_workflow_spin(workflow_t* self)
             data->initialized = true;
         }
     }
+    return false;
 }
 
 static void _idle_workflow_init(workflow_t* self)

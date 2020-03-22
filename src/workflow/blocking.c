@@ -30,7 +30,9 @@ static void _run_blocking_ui(bool (*is_done)(void))
             Abort("NULL workflow in _run_blocking_ui");
         }
         screen_process();
-        workflow->spin(workflow);
+        if (workflow->spin(workflow)) {
+            workflow_stack_stop_workflow();
+        }
     }
 }
 

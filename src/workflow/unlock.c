@@ -147,7 +147,7 @@ static void _unlock_handle_password_entry(unlock_data_t* data)
     }
 }
 
-static void _unlock_spin(workflow_t* self)
+static bool _unlock_spin(workflow_t* self)
 {
     unlock_data_t* data = (unlock_data_t*)self->data;
     switch (data->state) {
@@ -165,12 +165,13 @@ static void _unlock_spin(workflow_t* self)
          * aborted. */
         if (data->callback) {
             data->callback(data->result, data->callback_param);
-            workflow_stack_stop_workflow();
+            return true;
         }
         break;
     default:
         Abort("Unknown _unlock_spin status.");
     }
+    return false;
 }
 
 workflow_t* workflow_unlock(void (*callback)(bool result, void* param), void* callback_param)

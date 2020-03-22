@@ -46,7 +46,7 @@ void workflow_confirm_dismiss(const char* title, const char* body)
 workflow_t* workflow_allocate(
     workflow_method init,
     workflow_method cleanup,
-    workflow_method spin,
+    workflow_spin_method spin,
     size_t data_size)
 {
     workflow_t* result = (workflow_t*)malloc(sizeof(*result));

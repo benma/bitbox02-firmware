@@ -25,15 +25,15 @@ static void _unlock_clear(workflow_t* self)
     free(self->data);
 }
 
-static void _unlock_spin(workflow_t* self)
+static bool _unlock_spin(workflow_t* self)
 {
     unlock_data_t* data = (unlock_data_t*)self->data;
     if (data->count == data->n_turns) {
         data->callback(data->result, data->callback_param);
-        workflow_stack_stop_workflow();
-    } else {
-        data->count++;
+        return true;
     }
+    data->count++;
+    return false;
 }
 
 workflow_t* mock_workflow_unlock(int n_turns, bool result, void (*cb)(bool, void*), void* cb_param)

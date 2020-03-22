@@ -55,7 +55,7 @@ static void _reject(void* param)
 /**
  * Checks if the user has confirmed the choice.
  */
-static void _workflow_confirm_spin(workflow_t* self)
+static bool _workflow_confirm_spin(workflow_t* self)
 {
     data_t* data = (data_t*)self->data;
     if (data->done) {
@@ -63,9 +63,9 @@ static void _workflow_confirm_spin(workflow_t* self)
         if (data->callback) {
             data->callback(data->result, data->callback_param);
         }
-        /* Time to go, goodbye. */
-        workflow_stack_stop_workflow();
+        return true;
     }
+    return false;
 }
 
 /**

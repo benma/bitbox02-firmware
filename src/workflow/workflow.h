@@ -58,10 +58,11 @@ typedef struct _workflow_t {
     /* Size of the allocated data. */
     size_t data_size;
     /* Function to get run at every cycle */
-    void (*spin)(struct _workflow_t*);
+    bool (*spin)(struct _workflow_t*);
 } workflow_t;
 
 typedef void (*workflow_method)(workflow_t*);
+typedef bool (*workflow_spin_method)(workflow_t*);
 
 /**
  * Creates a new workflow object with the given methods and initializes empty data for it.
@@ -80,7 +81,7 @@ USE_RESULT
 workflow_t* workflow_allocate(
     workflow_method init,
     workflow_method cleanup,
-    workflow_method spin,
+    workflow_spin_method spin,
     size_t data_size);
 
 /**

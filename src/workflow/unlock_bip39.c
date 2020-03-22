@@ -112,7 +112,7 @@ static void _unlock_bip39_init(workflow_t* self)
  * has already been asked for. We just need to try unlocking
  * the seed and exit.
  */
-static void _unlock_bip39_spin(workflow_t* self)
+static bool _unlock_bip39_spin(workflow_t* self)
 {
     unlock_bip39_data_t* data = (unlock_bip39_data_t*)self->data;
 
@@ -130,7 +130,7 @@ static void _unlock_bip39_spin(workflow_t* self)
     if (data->callback) {
         data->callback(data->callback_param);
     }
-    workflow_stack_stop_workflow();
+    return true;
 }
 
 workflow_t* workflow_unlock_bip39(void (*callback)(void* param), void* callback_param)

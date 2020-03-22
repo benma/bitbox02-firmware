@@ -38,7 +38,9 @@ void firmware_main_loop(void)
         if (!workflow->spin) {
             Abort("NULL workflow spin in main");
         }
-        workflow->spin(workflow);
+        if (workflow->spin(workflow)) {
+            workflow_stack_stop_workflow();
+        }
         if (usb_is_enabled()) {
             /* First, process all the incoming USB traffic. */
             usb_processing_process(usb_processing_hww());

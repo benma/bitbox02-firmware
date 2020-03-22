@@ -83,7 +83,7 @@ static void _get_mnemonic_passphrase_cleanup(workflow_t* self)
     _clean_passphrase(data);
 }
 
-static void _get_mnemonic_passphrase_spin(workflow_t* self)
+static bool _get_mnemonic_passphrase_spin(workflow_t* self)
 {
     mnemonic_passphrase_data_t* data = (mnemonic_passphrase_data_t*)self->data;
     switch (data->state) {
@@ -119,11 +119,11 @@ static void _get_mnemonic_passphrase_spin(workflow_t* self)
             data->callback(data->passphrase, data->callback_param);
         }
         _clean_passphrase(data);
-        workflow_stack_stop_workflow();
-        break;
+        return true;
     default:
         Abort("Invalid get_mnemonic_passphrase state.");
     }
+    return false;
 }
 
 workflow_t* workflow_get_mnemonic_passphrase(void (*callback)(char*, void*), void* callback_param)

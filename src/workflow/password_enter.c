@@ -59,7 +59,7 @@ static void _password_cleanup(workflow_t* self)
     free(self);
 }
 
-static void _password_spin(workflow_t* self)
+static bool _password_spin(workflow_t* self)
 {
     password_enter_data_t* data = (password_enter_data_t*)self->data;
     if (data->password_available) {
@@ -67,9 +67,9 @@ static void _password_spin(workflow_t* self)
             data->callback(data->password, data->callback_param);
         }
         util_zero(data->password, sizeof(data->password));
-        /* We're done. */
-        workflow_stack_stop_workflow();
+        return true;
     }
+    return false;
 }
 
 workflow_t* password_enter(
