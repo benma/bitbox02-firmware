@@ -5,7 +5,7 @@
 #include <ui/screen_process.h>
 #include <ui/workflow_stack.h>
 #include <workflow/workflow.h>
-
+#include <rust/rust.h>
 static bool _done = true;
 
 static bool _is_done(void)
@@ -25,14 +25,8 @@ static void _run_blocking_ui(bool (*is_done)(void))
         Abort("is_done function\nis NULL.");
     }
     while (!is_done()) {
-        workflow_t* workflow = workflow_stack_top();
-        if (!workflow) {
-            Abort("NULL workflow in _run_blocking_ui");
-        }
         screen_process();
-        if (workflow->spin(workflow)) {
-            workflow_stack_stop_workflow();
-        }
+        rust_util_spin();
     }
 }
 

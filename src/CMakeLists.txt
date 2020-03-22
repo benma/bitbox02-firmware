@@ -340,6 +340,7 @@ add_custom_target(rust-bindgen
     --whitelist-function UG_SendBuffer
     --whitelist-function workflow_confirm_blocking
     --whitelist-function screen_print_debug
+    --whitelist-function screen_process
     --whitelist-function ui_screen_stack_push
     --whitelist-function ui_screen_stack_pop
     --whitelist-function label_create
@@ -355,6 +356,11 @@ add_custom_target(rust-bindgen
     --whitelist-var font_font_a_9X9
     --whitelist-var font_monogram_5X9
     --whitelist-var WALLY_OK
+    --whitelist-type workflow_t
+    --whitelist-function workflow_stack_top
+    --whitelist-function workflow_destroy
+    --whitelist-function workflow_stack_stop_workflow
+    --whitelist-function password_enter
     ${CMAKE_CURRENT_SOURCE_DIR}/rust/bitbox02-sys/wrapper.h --
     -DPB_NO_PACKED_STRUCTS=1 -DPB_FIELD_16BIT=1 -fshort-enums ${RUST_BINDGEN_FLAGS} ${RUST_INCLUDES}
   )

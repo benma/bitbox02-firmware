@@ -54,6 +54,11 @@ pub extern "C" fn rust_util_uint8_to_hex(buf: Bytes, mut out: CStrMut) {
     });
 }
 
+#[no_mangle]
+pub extern "C" fn rust_util_spin() {
+    bitbox02::workflow::spin2();
+}
+
 #[repr(C)]
 pub struct Bytes {
     buf: *const c_uchar,

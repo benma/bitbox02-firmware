@@ -39,7 +39,7 @@ dockerdev () {
 
     # If already running, enter the container.
     if docker ps --filter "name=^${CONTAINER_NAME}$" | grep -q "$CONTAINER_NAME"; then
-        docker exec --user=dockeruser --workdir="$MOUNT_DIR" -it "$CONTAINER_NAME" bash
+        docker exec --workdir="$MOUNT_DIR" -it "$CONTAINER_NAME" bash
         return
     fi
 

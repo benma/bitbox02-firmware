@@ -16,7 +16,6 @@
 #![no_std]
 
 use core::time::Duration;
-
 // Reexport the protobuf types
 pub use bitbox02_sys::BitBoxBaseConfirmPairingRequest;
 pub use bitbox02_sys::BitBoxBaseDisplayStatusRequest;
@@ -58,8 +57,11 @@ pub use bitbox02_sys::font_monogram_5X9;
 
 pub use bitbox02_sys::confirm_params_t;
 
+pub use bitbox02_sys::_workflow_t;
+
 #[macro_use]
 pub mod util;
+pub mod workflow;
 
 pub fn ug_put_string(x: i16, y: i16, input: &str, inverted: bool) {
     if let Ok(buf) = str_to_cstr!(input, 128) {

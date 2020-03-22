@@ -23,9 +23,13 @@
 #include <ui/fonts/monogram_5X9.h>
 #include <ui/oled/oled.h>
 #include <ui/screen_stack.h>
+#include <ui/screen_process.h>
 #include <ui/ugui/ugui.h>
 #include <wally_crypto.h>
+#include <workflow/workflow.h>
 #include <workflow/confirm.h>
+#include <workflow/password_enter.h>
+#include <ui/workflow_stack.h>
 
 #if !defined(TESTING)
 #include <hal_delay.h>
