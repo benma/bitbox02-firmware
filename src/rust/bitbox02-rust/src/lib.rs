@@ -17,6 +17,7 @@
 // When compiling for testing we allow certain warnings.
 #![cfg_attr(test, allow(unused_imports, dead_code))]
 
+
 mod error;
 #[macro_use]
 pub mod general;
@@ -24,6 +25,8 @@ pub mod commander;
 pub mod platform;
 pub mod util;
 pub mod workflow;
+mod bb02_async;
+
 
 // reexport arrayvec because it is used in our macro "print_debug"
 pub extern crate arrayvec;

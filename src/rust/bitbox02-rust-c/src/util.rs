@@ -266,6 +266,11 @@ pub unsafe extern "C" fn rust_util_cstr_mut(buf: *mut c_char, cap: usize) -> CSt
     CStrMut::new(buf, cap)
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn rust_marko() {
+    bitbox02_rust::workflow::password_enter::spin2();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

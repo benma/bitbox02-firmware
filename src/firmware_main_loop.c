@@ -22,11 +22,14 @@
 #include "ui/screen_stack.h"
 #include "ui/workflow_stack.h"
 #include "usb/usb.h"
+#include <rust/rust.h>
 #include "usb/usb_processing.h"
 #include "workflow/workflow.h"
 
 void firmware_main_loop(void)
 {
+    rust_marko();
+    screen_print_debug("DONE", 5000);
     while (1) {
         workflow_t* workflow = workflow_stack_top();
         if (!workflow) {
