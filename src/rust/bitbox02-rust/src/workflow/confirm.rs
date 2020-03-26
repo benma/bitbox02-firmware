@@ -17,18 +17,21 @@ use crate::bb02_async::option;
 use alloc::boxed::Box;
 use core::pin::Pin;
 
-pub use bitbox02::ui::ConfirmParams as Params;
+pub use bitbox02::ui::{ConfirmParams as Params, SafeOption};
+use core::marker::PhantomPinned;
 
 /// Returns true if the user accepts, false if the user rejects.
 pub async fn confirm(params: &Params<'_>) -> bool {
-    let mut result: Pin<Box<Option<bool>>> = Box::pin(None);
-
+    let mut result: Pin<Box<SafeOption>> = Box::pin(SafeOption(None, PhantomPinned));
     // The component will set the result when the user accepted/rejected.
     let mut component = bitbox02::ui::confirm_create(&params, result.as_mut());
 
     bitbox02::ui::screen_stack_push(&mut component);
-    option(&result).await;
+    // This does not work.
+    // use core::ops::DerefMut;
+    // *result.deref_mut() = SafeOption(Some(true), PhantomPinned);
+    option(&result.0).await;
     bitbox02::ui::screen_stack_pop();
 
-    result.unwrap()
+    result.0.unwrap()
 }

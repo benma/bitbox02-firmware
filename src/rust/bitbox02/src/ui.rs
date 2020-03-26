@@ -18,7 +18,6 @@ extern crate alloc;
 use crate::password::Password;
 use alloc::boxed::Box;
 use core::pin::Pin;
-
 /// Wraps the C component_t to be used in Rust.
 pub struct Component(*mut bitbox02_sys::component_t);
 
@@ -75,9 +74,12 @@ pub struct ConfirmParams<'a> {
     pub display_size: usize,
 }
 
+use core::marker::PhantomPinned;
+pub struct SafeOption(pub Option<bool>, pub PhantomPinned);
+
 /// Creates a user confirmation dialog screen.
 /// `result` - will be asynchronously set to `Some(bool)` once the user accets or rejects.
-pub fn confirm_create(params: &ConfirmParams, result: Pin<&mut Option<bool>>) -> Component {
+pub fn confirm_create(params: &ConfirmParams, result: Pin<&mut SafeOption>) -> Component {
     let params = bitbox02_sys::confirm_params_t {
         title: crate::str_to_cstr_force!(params.title, 200).as_ptr(),
         body: crate::str_to_cstr_force!(params.body, 200).as_ptr(),
@@ -91,12 +93,12 @@ pub fn confirm_create(params: &ConfirmParams, result: Pin<&mut Option<bool>>) ->
     };
 
     extern "C" fn on_accept_cb(param: *mut c_void) {
-        let mut out: Box<Pin<&mut Option<bool>>> = unsafe { Box::from_raw(param as *mut _) };
-        out.set(Some(true));
+        let mut out: Box<Pin<&mut SafeOption>> = unsafe { Box::from_raw(param as *mut _) };
+        out.set(SafeOption(Some(true), PhantomPinned));
     }
     extern "C" fn on_reject_cb(param: *mut c_void) {
-        let mut out: Box<Pin<&mut Option<bool>>> = unsafe { Box::from_raw(param as *mut _) };
-        out.set(Some(false));
+        let mut out: Box<Pin<&mut SafeOption>> = unsafe { Box::from_raw(param as *mut _) };
+        out.set(SafeOption(Some(false), PhantomPinned));
     }
 
     let result_ptr = Box::into_raw(Box::new(result)) as *mut _; // passed to callbacks `param`.
