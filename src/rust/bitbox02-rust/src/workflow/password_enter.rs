@@ -27,7 +27,7 @@ use core::pin::Pin;
 /// // use pw.
 /// ```
 pub async fn password_enter(title: &str, special_chars: bool, password_out: &mut Password) {
-    let result = Rc::new(RefCell::new(None));
+    let result = RefCell::new(None);
     let mut component =
         bitbox02::ui::trinary_input_string_create_password(title, special_chars, |pw| {
             *result.borrow_mut() = Some(pw);

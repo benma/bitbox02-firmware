@@ -54,7 +54,7 @@ pub fn option<'a, O>(option: &'a Option<O>) -> AsyncOption<'a, O> {
 use alloc::rc::Rc;
 use core::cell::RefCell;
 /// Implements the Option future, see `option()`.
-pub struct AsyncOption2<'a, O>(&'a Rc<RefCell<Option<O>>>);
+pub struct AsyncOption2<'a, O>(&'a RefCell<Option<O>>);
 
 impl<O> core::future::Future for AsyncOption2<'_, O> {
     type Output = ();
@@ -71,6 +71,6 @@ impl<O> core::future::Future for AsyncOption2<'_, O> {
 
 /// Waits for an option to contain a value and returns a copy of that value.
 /// E.g. `assert_eq!(option(&Some(42)).await, 42)`.
-pub fn option2<'a, O>(option: &'a Rc<RefCell<Option<O>>>) -> AsyncOption2<'a, O> {
+pub fn option2<'a, O>(option: &'a RefCell<Option<O>>) -> AsyncOption2<'a, O> {
     (AsyncOption2(&option))
 }
