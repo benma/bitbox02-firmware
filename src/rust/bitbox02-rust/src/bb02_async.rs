@@ -50,3 +50,27 @@ impl<O> core::future::Future for AsyncOption<'_, O> {
 pub fn option<'a, O>(option: &'a Option<O>) -> AsyncOption<'a, O> {
     AsyncOption(&option)
 }
+
+use alloc::rc::Rc;
+use core::cell::RefCell;
+/// Implements the Option future, see `option()`.
+pub struct AsyncOption2<'a, O>(&'a Rc<RefCell<Option<O>>>);
+
+impl<O> core::future::Future for AsyncOption2<'_, O> {
+    type Output = ();
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        _cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        match **(&self.0.borrow()) {
+            None => core::task::Poll::Pending,
+            Some(_) => core::task::Poll::Ready(()),
+        }
+    }
+}
+
+/// Waits for an option to contain a value and returns a copy of that value.
+/// E.g. `assert_eq!(option(&Some(42)).await, 42)`.
+pub fn option2<'a, O>(option: &'a Rc<RefCell<Option<O>>>) -> AsyncOption2<'a, O> {
+    (AsyncOption2(&option))
+}

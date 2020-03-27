@@ -25,10 +25,8 @@ pub async fn confirm(params: &Params<'_>) -> bool {
 
     // The component will set the result when the user accepted/rejected.
     let mut component = bitbox02::ui::confirm_create(&params, result.as_mut());
-
-    bitbox02::ui::screen_stack_push(&mut component);
+    component.screen_stack_push();
     option(&result).await;
-    bitbox02::ui::screen_stack_pop();
 
     result.unwrap()
 }
