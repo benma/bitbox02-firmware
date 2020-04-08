@@ -13,11 +13,11 @@
 # limitations under the License.
 
 [package]
-name = "bitbox02-rust"
+name = "bitbox02-noise"
 version = "0.1.0"
 authors = ["Shift Cryptosecurity AG <support@shiftcrypto.ch>"]
 edition = "2018"
-description = "BitBox02 functionality implemented in rust"
+description = "BitBox02 noise protocol primitives"
 license = "Apache-2.0"
 
 [lib]
@@ -26,12 +26,21 @@ license = "Apache-2.0"
 doctest = false
 
 [dependencies]
-bitbox02 = {path = "../bitbox02"}
-bitbox02-noise = {path = "../bitbox02-noise"}
-binascii = "0.1"
+zeroize = "1.1.0"
 
-# For stack allocated strings
-[dependencies.arrayvec]
-version  = "0.5.1"
-# Disable the "std" feature
+[dependencies.noise-protocol]
+git = "https://github.com/benma/noise-rust"
+branch = "sensitive"
 default-features = false
+features = ["use_alloc"]
+
+[dependencies.noise-rust-crypto]
+git = "https://github.com/benma/noise-rust"
+branch = "sensitive"
+default-features = false
+features = ["use-sha2", "use-chacha20poly1305"]
+
+[dependencies.x25519-dalek]
+version = "0.6.0"
+default-features = false
+features = ["u32_backend"]
