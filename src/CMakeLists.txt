@@ -335,9 +335,12 @@ add_custom_target(rust-bindgen
     --ctypes-prefix util::c_types
     --whitelist-function hww_api_process_packet
     --whitelist-function memory_is_initialized
+    --whitelist-function memory_get_noise_static_private_key
     --whitelist-function memory_is_mnemonic_passphrase_enabled
     --whitelist-function memory_get_attestation_pubkey_and_certificate
     --whitelist-function memory_bootloader_hash
+    --whitelist-function memory_check_noise_remote_static_pubkey
+    --whitelist-function memory_add_noise_remote_static_pubkey
     --whitelist-function securechip_attestation_sign
     --whitelist-function keystore_is_locked
     --whitelist-function keystore_unlock
@@ -366,6 +369,7 @@ add_custom_target(rust-bindgen
     --whitelist-function random_32_bytes_mcu
     --whitelist-type component_t
     --whitelist-type commander_error_t
+    --whitelist-function commander
     --whitelist-type BitBoxBaseRequest
     --whitelist-var ".*_tag"
     --whitelist-var font_font_a_9X9
@@ -389,7 +393,7 @@ if(NOT CMAKE_CROSSCOMPILING)
         # see src/rust/bitbox02-rust-c/src/lib.rs.
         # https://github.com/rust-lang/rust/issues/66740
         RUSTC_BOOTSTRAP=1
-        ${CARGO} test --all-features --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml --target-dir ${RUST_BINARY_DIR} ${RUST_CARGO_FLAG}
+        ${CARGO} test --all-features --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml --target-dir ${RUST_BINARY_DIR} ${RUST_CARGO_FLAG} -- --nocapture
     )
   add_dependencies(rust-test rust-bindgen)
 endif()
