@@ -1,0 +1,19 @@
+[package]
+edition = "2018"
+authors = ["trevp", "Guanhao Yin <sopium@mysterious.site>"]
+license = "Unlicense"
+name = "noise-protocol"
+readme = "README.md"
+repository = "https://github.com/sopium/noise-rust"
+version = "0.1.3"
+description = "Noise Protocol Framework implementation."
+keywords = ["noise"]
+categories = ["cryptography"]
+
+[dependencies]
+arrayvec = { version = "0.5", default-features = false }
+
+[features]
+default = ["use_std"]
+use_std = []
+use_alloc = []
