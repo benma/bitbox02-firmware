@@ -13,6 +13,9 @@
 // limitations under the License.
 
 mod noise;
+
+pub use noise::BB02Random32;
+
 extern crate alloc;
 use alloc::vec::Vec;
 

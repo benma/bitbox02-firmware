@@ -27,6 +27,7 @@ doctest = false
 
 [dependencies]
 bitbox02 = {path = "../bitbox02"}
+bitbox02-noise = {path = "../bitbox02-noise"}
 binascii = "0.1"
 
 # For stack allocated strings
