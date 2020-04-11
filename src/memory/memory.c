@@ -20,7 +20,6 @@
 #include "hardfault.h"
 #include "memory/memory.h"
 #include "random.h"
-#include "usb/noise.h"
 #include "util.h"
 #include <rust/rust.h>
 
@@ -32,6 +31,8 @@
 #endif
 
 #include <crypto/sha2/sha256.h>
+
+#define NOISE_PUBKEY_SIZE 32
 
 /********* Definitions and read/write helper functions ****************/
 
