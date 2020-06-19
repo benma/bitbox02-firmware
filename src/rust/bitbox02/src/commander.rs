@@ -16,11 +16,11 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-pub type Error = bitbox02_sys::commander_error_t;
+pub use bitbox02_sys::commander_error_t as Error;
 
 pub fn api_process(
-    request: &crate::protobuf::Request,
-    response: &mut crate::protobuf::Response,
+    request: &crate::protobuf::CRequest,
+    response: &mut crate::protobuf::CResponse,
 ) -> Error {
     unsafe { bitbox02_sys::commander_api_process(request, response) }
 }

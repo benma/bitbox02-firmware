@@ -61,6 +61,27 @@ fn api_attestation(usb_in: &[u8]) -> Vec<u8> {
     out
 }
 
+fn commander(input: Vec<u8>) -> Vec<u8> {
+    use bitbox02::commander::Error::*;
+    use bitbox02::protobuf::*;
+    let request = decode(input);
+
+    let response = match request {
+        Err(_) => Response::Error,
+        Ok(Request::CRequest(request)) => {
+            let mut rsp: alloc::boxed::Box<CResponse> = Default::default();
+            match bitbox02::commander::api_process(&request, rsp.as_mut()) {
+                COMMANDER_OK => Response::CResponse(rsp),
+                _ => Response::Error,
+            }
+        }
+    };
+    // Same as (USB_DATA_MAX_LEN - 2) (1 byte reserved for HWW_RSP_* code, 1 byte for
+    // OP_STATUS_SUCCESS).
+    const MAX_OUT_LEN: usize = 7607;
+    bitbox02::protobuf::encode(response, MAX_OUT_LEN)
+}
+
 /// Async HWW api processing main entry point.
 /// `usb_in` - api request bytes.
 /// Returns the usb response bytes.
@@ -78,7 +99,7 @@ pub async fn process_packet(usb_in: Vec<u8>) -> Vec<u8> {
     }
 
     let mut out = [OP_STATUS_SUCCESS].to_vec();
-    match noise::process(usb_in, &mut out).await {
+    match noise::process(usb_in, &mut out, commander).await {
         Ok(()) => out,
         Err(noise::Error) => [OP_STATUS_FAILURE].to_vec(),
     }
