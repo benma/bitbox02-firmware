@@ -271,7 +271,7 @@ static commander_error_t _api_reboot(void)
 /**
  * Processes the command and forwards it to the requested function.
  */
-static commander_error_t _api_process(const Request* request, Response* response)
+commander_error_t commander_api_process(const Request* request, Response* response)
 {
     switch (request->which_request) {
 #if PLATFORM_BITBOX02 == 1
@@ -389,7 +389,7 @@ void commander(const in_buffer_t* in_buf, buffer_t* out_buf)
             // to be forced.
             commander_states_clear_force_next();
 
-            err = _api_process(&request, &response);
+            err = commander_api_process(&request, &response);
             util_zero(&request, sizeof(request));
         }
     }

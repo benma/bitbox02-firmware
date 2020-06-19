@@ -1,4 +1,5 @@
 // Copyright 2020 Shift Cryptosecurity AG
+// Copyright 2020 Shift Crypto AG
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +15,15 @@
 
 extern crate alloc;
 use alloc::vec::Vec;
+
+pub type Error = bitbox02_sys::commander_error_t;
+
+pub fn api_process(
+    request: &crate::protobuf::Request,
+    response: &mut crate::protobuf::Response,
+) -> Error {
+    unsafe { bitbox02_sys::commander_api_process(request, response) }
+}
 
 pub fn commander(input: Vec<u8>) -> Vec<u8> {
     let input = bitbox02_sys::in_buffer_t {

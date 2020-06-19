@@ -1,4 +1,5 @@
 // Copyright 2019 Shift Cryptosecurity AG
+// Copyright 2020 Shift Crypto AG
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -47,4 +48,8 @@ typedef enum { COMMANDER_ERROR_TABLE } commander_error_t;
  */
 void commander(const in_buffer_t* in_buf, buffer_t* out_buf);
 
+/**
+ * Processes an API call.
+ */
+commander_error_t commander_api_process(const Request* request, Response* response);
 #endif
