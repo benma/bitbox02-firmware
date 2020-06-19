@@ -1,4 +1,5 @@
 // Copyright 2019 Shift Cryptosecurity AG
+// Copyright 2020 Shift Crypto AG
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +17,7 @@
 #include <bitboxbase/bitboxbase_screensaver.h>
 #include <bitboxbase/bitboxbase_watchdog.h>
 #include <commander/commander.h>
+#include <commander/protobuf.h>
 #include <keystore.h>
 #include <memory/memory.h>
 #include <platform/bitboxbase/leds.h>

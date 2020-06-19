@@ -375,6 +375,10 @@ add_custom_target(rust-bindgen
     --whitelist-type commander_error_t
     --whitelist-function commander
     --whitelist-type BitBoxBaseRequest
+    --whitelist-function protobuf_encode
+    --whitelist-function protobuf_decode
+    --whitelist-type Request
+    --whitelist-type Response
     --whitelist-var ".*_tag"
     --whitelist-var font_font_a_9X9
     --whitelist-var font_font_a_11X10

@@ -1,4 +1,5 @@
 // Copyright 2019 Shift Cryptosecurity AG
+// Copyright 2020 Shift Crypto AG
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +24,7 @@ pub mod commander;
 pub mod keystore;
 pub mod memory;
 pub mod password;
+pub mod protobuf;
 pub mod random;
 pub mod securechip;
 pub mod ui;
