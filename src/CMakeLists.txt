@@ -372,7 +372,7 @@ add_custom_target(rust-bindgen
     --whitelist-function wally_sha256
     --whitelist-function random_32_bytes_mcu
     --whitelist-type component_t
-    --whitelist-type commander_error_t
+    --rustified-enum commander_error_t
     --whitelist-function commander_api_process
     --whitelist-function commander
     --whitelist-type BitBoxBaseRequest

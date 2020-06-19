@@ -59,14 +59,6 @@ pub const BitBoxBaseRequest_set_config_tag: u16 =
 // Use this for functions exported to "C"
 #[allow(non_camel_case_types)]
 pub type commander_error_t = bitbox02_sys::commander_error_t;
-pub type CommanderError = bitbox02_sys::commander_error_t;
-
-pub const COMMANDER_ERR_USER_ABORT: bitbox02_sys::commander_error_t =
-    bitbox02_sys::commander_error_t_COMMANDER_ERR_USER_ABORT;
-pub const COMMANDER_ERR_GENERIC: bitbox02_sys::commander_error_t =
-    bitbox02_sys::commander_error_t_COMMANDER_ERR_GENERIC;
-pub const COMMANDER_OK: bitbox02_sys::commander_error_t =
-    bitbox02_sys::commander_error_t_COMMANDER_OK;
 
 pub use bitbox02_sys::font_monogram_5X9;
 
