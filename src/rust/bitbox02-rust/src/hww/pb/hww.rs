@@ -9,25 +9,26 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
 
+use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
-use alloc::borrow::Cow;
 use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
+use alloc::string::String;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct Error<'a> {
+pub struct Error {
     pub code: i32,
-    pub message: Cow<'a, str>,
+    pub message: String,
 }
 
-impl<'a> MessageRead<'a> for Error<'a> {
+impl<'a> MessageRead<'a> for Error {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.code = r.read_int32(bytes)?,
-                Ok(18) => msg.message = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(18) => msg.message = r.read_string(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -36,16 +37,16 @@ impl<'a> MessageRead<'a> for Error<'a> {
     }
 }
 
-impl<'a> MessageWrite for Error<'a> {
+impl MessageWrite for Error {
     fn get_size(&self) -> usize {
         0
         + if self.code == 0i32 { 0 } else { 1 + sizeof_varint(*(&self.code) as u64) }
-        + if self.message == "" { 0 } else { 1 + sizeof_len((&self.message).len()) }
+        + if self.message == String::default() { 0 } else { 1 + sizeof_len((&self.message).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.code != 0i32 { w.write_with_tag(8, |w| w.write_int32(*&self.code))?; }
-        if self.message != "" { w.write_with_tag(18, |w| w.write_string(&**&self.message))?; }
+        if self.message != String::default() { w.write_with_tag(18, |w| w.write_string(&**&self.message))?; }
         Ok(())
     }
 }
@@ -63,11 +64,11 @@ impl<'a> MessageRead<'a> for Success {
 impl MessageWrite for Success { }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct Request<'a> {
-    pub request: mod_Request::OneOfrequest<'a>,
+pub struct Request {
+    pub request: mod_Request::OneOfrequest,
 }
 
-impl<'a> MessageRead<'a> for Request<'a> {
+impl<'a> MessageRead<'a> for Request {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -106,7 +107,7 @@ impl<'a> MessageRead<'a> for Request<'a> {
     }
 }
 
-impl<'a> MessageWrite for Request<'a> {
+impl MessageWrite for Request {
     fn get_size(&self) -> usize {
         0
         + match self.request {
@@ -177,37 +178,37 @@ use alloc::vec::Vec;
 use super::*;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum OneOfrequest<'a> {
+pub enum OneOfrequest {
     random_number(random_number::RandomNumberRequest),
-    device_name(bitbox02_system::SetDeviceNameRequest<'a>),
-    device_language(bitbox02_system::SetDeviceLanguageRequest<'a>),
+    device_name(bitbox02_system::SetDeviceNameRequest),
+    device_language(bitbox02_system::SetDeviceLanguageRequest),
     device_info(bitbox02_system::DeviceInfoRequest),
-    set_password(bitbox02_system::SetPasswordRequest<'a>),
+    set_password(bitbox02_system::SetPasswordRequest),
     create_backup(backup_commands::CreateBackupRequest),
     show_mnemonic(mnemonic::ShowMnemonicRequest),
-    btc_pub(btc::BTCPubRequest<'a>),
-    btc_sign_init(btc::BTCSignInitRequest<'a>),
-    btc_sign_input(btc::BTCSignInputRequest<'a>),
-    btc_sign_output(btc::BTCSignOutputRequest<'a>),
+    btc_pub(btc::BTCPubRequest),
+    btc_sign_init(btc::BTCSignInitRequest),
+    btc_sign_input(btc::BTCSignInputRequest),
+    btc_sign_output(btc::BTCSignOutputRequest),
     insert_remove_sdcard(bitbox02_system::InsertRemoveSDCardRequest),
     check_sdcard(bitbox02_system::CheckSDCardRequest),
     set_mnemonic_passphrase_enabled(mnemonic::SetMnemonicPassphraseEnabledRequest),
     list_backups(backup_commands::ListBackupsRequest),
-    restore_backup(backup_commands::RestoreBackupRequest<'a>),
-    perform_attestation(perform_attestation::PerformAttestationRequest<'a>),
+    restore_backup(backup_commands::RestoreBackupRequest),
+    perform_attestation(perform_attestation::PerformAttestationRequest),
     reboot(system::RebootRequest),
     check_backup(backup_commands::CheckBackupRequest),
-    eth(eth::ETHRequest<'a>),
+    eth(eth::ETHRequest),
     reset(bitbox02_system::ResetRequest),
     restore_from_mnemonic(mnemonic::RestoreFromMnemonicRequest),
-    bitboxbase(bitboxbase::BitBoxBaseRequest<'a>),
+    bitboxbase(bitboxbase::BitBoxBaseRequest),
     fingerprint(common::RootFingerprintRequest),
-    btc(btc::BTCRequest<'a>),
+    btc(btc::BTCRequest),
     electrum_encryption_key(keystore::ElectrumEncryptionKeyRequest),
     None,
 }
 
-impl<'a> Default for OneOfrequest<'a> {
+impl Default for OneOfrequest {
     fn default() -> Self {
         OneOfrequest::None
     }
@@ -216,11 +217,11 @@ impl<'a> Default for OneOfrequest<'a> {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct Response<'a> {
-    pub response: mod_Response::OneOfresponse<'a>,
+pub struct Response {
+    pub response: mod_Response::OneOfresponse,
 }
 
-impl<'a> MessageRead<'a> for Response<'a> {
+impl<'a> MessageRead<'a> for Response {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -247,7 +248,7 @@ impl<'a> MessageRead<'a> for Response<'a> {
     }
 }
 
-impl<'a> MessageWrite for Response<'a> {
+impl MessageWrite for Response {
     fn get_size(&self) -> usize {
         0
         + match self.response {
@@ -294,25 +295,25 @@ use alloc::vec::Vec;
 use super::*;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum OneOfresponse<'a> {
+pub enum OneOfresponse {
     success(Success),
-    error(Error<'a>),
-    random_number(random_number::RandomNumberResponse<'a>),
-    device_info(bitbox02_system::DeviceInfoResponse<'a>),
-    pub_pb(common::PubResponse<'a>),
-    btc_sign_next(btc::BTCSignNextResponse<'a>),
-    list_backups(backup_commands::ListBackupsResponse<'a>),
-    check_backup(backup_commands::CheckBackupResponse<'a>),
-    perform_attestation(perform_attestation::PerformAttestationResponse<'a>),
+    error(Error),
+    random_number(random_number::RandomNumberResponse),
+    device_info(bitbox02_system::DeviceInfoResponse),
+    pub_pb(common::PubResponse),
+    btc_sign_next(btc::BTCSignNextResponse),
+    list_backups(backup_commands::ListBackupsResponse),
+    check_backup(backup_commands::CheckBackupResponse),
+    perform_attestation(perform_attestation::PerformAttestationResponse),
     check_sdcard(bitbox02_system::CheckSDCardResponse),
-    eth(eth::ETHResponse<'a>),
-    fingerprint(common::RootFingerprintResponse<'a>),
-    btc(btc::BTCResponse<'a>),
-    electrum_encryption_key(keystore::ElectrumEncryptionKeyResponse<'a>),
+    eth(eth::ETHResponse),
+    fingerprint(common::RootFingerprintResponse),
+    btc(btc::BTCResponse),
+    electrum_encryption_key(keystore::ElectrumEncryptionKeyResponse),
     None,
 }
 
-impl<'a> Default for OneOfresponse<'a> {
+impl Default for OneOfresponse {
     fn default() -> Self {
         OneOfresponse::None
     }

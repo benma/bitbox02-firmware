@@ -8,9 +8,9 @@
 #![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
-
+use alloc::borrow::ToOwned;
+use alloc::string::String;
 use alloc::vec::Vec;
-use alloc::borrow::Cow;
 use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
@@ -47,16 +47,16 @@ impl MessageWrite for ElectrumEncryptionKeyRequest {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct ElectrumEncryptionKeyResponse<'a> {
-    pub key: Cow<'a, str>,
+pub struct ElectrumEncryptionKeyResponse {
+    pub key: String,
 }
 
-impl<'a> MessageRead<'a> for ElectrumEncryptionKeyResponse<'a> {
+impl<'a> MessageRead<'a> for ElectrumEncryptionKeyResponse {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.key = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.key = r.read_string(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -65,15 +65,14 @@ impl<'a> MessageRead<'a> for ElectrumEncryptionKeyResponse<'a> {
     }
 }
 
-impl<'a> MessageWrite for ElectrumEncryptionKeyResponse<'a> {
+impl MessageWrite for ElectrumEncryptionKeyResponse {
     fn get_size(&self) -> usize {
         0
-        + if self.key == "" { 0 } else { 1 + sizeof_len((&self.key).len()) }
+        + if self.key == String::default() { 0 } else { 1 + sizeof_len((&self.key).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.key != "" { w.write_with_tag(10, |w| w.write_string(&**&self.key))?; }
+        if self.key != String::default() { w.write_with_tag(10, |w| w.write_string(&**&self.key))?; }
         Ok(())
     }
 }
-

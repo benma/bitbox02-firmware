@@ -8,24 +8,23 @@
 #![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
-
+use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
-use alloc::borrow::Cow;
 use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct PerformAttestationRequest<'a> {
-    pub challenge: Cow<'a, [u8]>,
+pub struct PerformAttestationRequest {
+    pub challenge: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for PerformAttestationRequest<'a> {
+impl<'a> MessageRead<'a> for PerformAttestationRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.challenge = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.challenge = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -34,37 +33,37 @@ impl<'a> MessageRead<'a> for PerformAttestationRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for PerformAttestationRequest<'a> {
+impl MessageWrite for PerformAttestationRequest {
     fn get_size(&self) -> usize {
         0
-        + if self.challenge == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.challenge).len()) }
+        + if self.challenge == vec![] { 0 } else { 1 + sizeof_len((&self.challenge).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.challenge != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.challenge))?; }
+        if self.challenge != vec![] { w.write_with_tag(10, |w| w.write_bytes(&**&self.challenge))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct PerformAttestationResponse<'a> {
-    pub bootloader_hash: Cow<'a, [u8]>,
-    pub device_pubkey: Cow<'a, [u8]>,
-    pub certificate: Cow<'a, [u8]>,
-    pub root_pubkey_identifier: Cow<'a, [u8]>,
-    pub challenge_signature: Cow<'a, [u8]>,
+pub struct PerformAttestationResponse {
+    pub bootloader_hash: Vec<u8>,
+    pub device_pubkey: Vec<u8>,
+    pub certificate: Vec<u8>,
+    pub root_pubkey_identifier: Vec<u8>,
+    pub challenge_signature: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for PerformAttestationResponse<'a> {
+impl<'a> MessageRead<'a> for PerformAttestationResponse {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.bootloader_hash = r.read_bytes(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.device_pubkey = r.read_bytes(bytes).map(Cow::Borrowed)?,
-                Ok(26) => msg.certificate = r.read_bytes(bytes).map(Cow::Borrowed)?,
-                Ok(34) => msg.root_pubkey_identifier = r.read_bytes(bytes).map(Cow::Borrowed)?,
-                Ok(42) => msg.challenge_signature = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.bootloader_hash = r.read_bytes(bytes)?.to_owned(),
+                Ok(18) => msg.device_pubkey = r.read_bytes(bytes)?.to_owned(),
+                Ok(26) => msg.certificate = r.read_bytes(bytes)?.to_owned(),
+                Ok(34) => msg.root_pubkey_identifier = r.read_bytes(bytes)?.to_owned(),
+                Ok(42) => msg.challenge_signature = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -73,23 +72,22 @@ impl<'a> MessageRead<'a> for PerformAttestationResponse<'a> {
     }
 }
 
-impl<'a> MessageWrite for PerformAttestationResponse<'a> {
+impl MessageWrite for PerformAttestationResponse {
     fn get_size(&self) -> usize {
         0
-        + if self.bootloader_hash == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.bootloader_hash).len()) }
-        + if self.device_pubkey == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.device_pubkey).len()) }
-        + if self.certificate == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.certificate).len()) }
-        + if self.root_pubkey_identifier == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.root_pubkey_identifier).len()) }
-        + if self.challenge_signature == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.challenge_signature).len()) }
+        + if self.bootloader_hash == vec![] { 0 } else { 1 + sizeof_len((&self.bootloader_hash).len()) }
+        + if self.device_pubkey == vec![] { 0 } else { 1 + sizeof_len((&self.device_pubkey).len()) }
+        + if self.certificate == vec![] { 0 } else { 1 + sizeof_len((&self.certificate).len()) }
+        + if self.root_pubkey_identifier == vec![] { 0 } else { 1 + sizeof_len((&self.root_pubkey_identifier).len()) }
+        + if self.challenge_signature == vec![] { 0 } else { 1 + sizeof_len((&self.challenge_signature).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.bootloader_hash != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.bootloader_hash))?; }
-        if self.device_pubkey != Cow::Borrowed(b"") { w.write_with_tag(18, |w| w.write_bytes(&**&self.device_pubkey))?; }
-        if self.certificate != Cow::Borrowed(b"") { w.write_with_tag(26, |w| w.write_bytes(&**&self.certificate))?; }
-        if self.root_pubkey_identifier != Cow::Borrowed(b"") { w.write_with_tag(34, |w| w.write_bytes(&**&self.root_pubkey_identifier))?; }
-        if self.challenge_signature != Cow::Borrowed(b"") { w.write_with_tag(42, |w| w.write_bytes(&**&self.challenge_signature))?; }
+        if self.bootloader_hash != vec![] { w.write_with_tag(10, |w| w.write_bytes(&**&self.bootloader_hash))?; }
+        if self.device_pubkey != vec![] { w.write_with_tag(18, |w| w.write_bytes(&**&self.device_pubkey))?; }
+        if self.certificate != vec![] { w.write_with_tag(26, |w| w.write_bytes(&**&self.certificate))?; }
+        if self.root_pubkey_identifier != vec![] { w.write_with_tag(34, |w| w.write_bytes(&**&self.root_pubkey_identifier))?; }
+        if self.challenge_signature != vec![] { w.write_with_tag(42, |w| w.write_bytes(&**&self.challenge_signature))?; }
         Ok(())
     }
 }
-

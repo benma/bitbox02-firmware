@@ -8,24 +8,23 @@
 #![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
-
+use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
-use alloc::borrow::Cow;
 use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct RandomNumberResponse<'a> {
-    pub number: Cow<'a, [u8]>,
+pub struct RandomNumberResponse {
+    pub number: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for RandomNumberResponse<'a> {
+impl<'a> MessageRead<'a> for RandomNumberResponse {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.number = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.number = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -34,14 +33,14 @@ impl<'a> MessageRead<'a> for RandomNumberResponse<'a> {
     }
 }
 
-impl<'a> MessageWrite for RandomNumberResponse<'a> {
+impl MessageWrite for RandomNumberResponse {
     fn get_size(&self) -> usize {
         0
-        + if self.number == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.number).len()) }
+        + if self.number == vec![] { 0 } else { 1 + sizeof_len((&self.number).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.number != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.number))?; }
+        if self.number != vec![] { w.write_with_tag(10, |w| w.write_bytes(&**&self.number))?; }
         Ok(())
     }
 }
@@ -57,4 +56,3 @@ impl<'a> MessageRead<'a> for RandomNumberRequest {
 }
 
 impl MessageWrite for RandomNumberRequest { }
-

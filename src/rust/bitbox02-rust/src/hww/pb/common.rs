@@ -8,24 +8,24 @@
 #![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
-
+use alloc::borrow::ToOwned;
+use alloc::string::String;
 use alloc::vec::Vec;
-use alloc::borrow::Cow;
 use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct PubResponse<'a> {
-    pub pub_pb: Cow<'a, str>,
+pub struct PubResponse {
+    pub pub_pb: String,
 }
 
-impl<'a> MessageRead<'a> for PubResponse<'a> {
+impl<'a> MessageRead<'a> for PubResponse {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.pub_pb = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.pub_pb = r.read_string(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -34,14 +34,14 @@ impl<'a> MessageRead<'a> for PubResponse<'a> {
     }
 }
 
-impl<'a> MessageWrite for PubResponse<'a> {
+impl MessageWrite for PubResponse {
     fn get_size(&self) -> usize {
         0
-        + if self.pub_pb == "" { 0 } else { 1 + sizeof_len((&self.pub_pb).len()) }
+        + if self.pub_pb == String::default() { 0 } else { 1 + sizeof_len((&self.pub_pb).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.pub_pb != "" { w.write_with_tag(10, |w| w.write_string(&**&self.pub_pb))?; }
+        if self.pub_pb != String::default() { w.write_with_tag(10, |w| w.write_string(&**&self.pub_pb))?; }
         Ok(())
     }
 }
@@ -59,16 +59,16 @@ impl<'a> MessageRead<'a> for RootFingerprintRequest {
 impl MessageWrite for RootFingerprintRequest { }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct RootFingerprintResponse<'a> {
-    pub fingerprint: Cow<'a, [u8]>,
+pub struct RootFingerprintResponse {
+    pub fingerprint: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for RootFingerprintResponse<'a> {
+impl<'a> MessageRead<'a> for RootFingerprintResponse {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.fingerprint = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.fingerprint = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -77,37 +77,37 @@ impl<'a> MessageRead<'a> for RootFingerprintResponse<'a> {
     }
 }
 
-impl<'a> MessageWrite for RootFingerprintResponse<'a> {
+impl MessageWrite for RootFingerprintResponse {
     fn get_size(&self) -> usize {
         0
-        + if self.fingerprint == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.fingerprint).len()) }
+        + if self.fingerprint == vec![] { 0 } else { 1 + sizeof_len((&self.fingerprint).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.fingerprint != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.fingerprint))?; }
+        if self.fingerprint != vec![] { w.write_with_tag(10, |w| w.write_bytes(&**&self.fingerprint))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct XPub<'a> {
-    pub depth: Cow<'a, [u8]>,
-    pub parent_fingerprint: Cow<'a, [u8]>,
+pub struct XPub {
+    pub depth: Vec<u8>,
+    pub parent_fingerprint: Vec<u8>,
     pub child_num: u32,
-    pub chain_code: Cow<'a, [u8]>,
-    pub public_key: Cow<'a, [u8]>,
+    pub chain_code: Vec<u8>,
+    pub public_key: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for XPub<'a> {
+impl<'a> MessageRead<'a> for XPub {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.depth = r.read_bytes(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.parent_fingerprint = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.depth = r.read_bytes(bytes)?.to_owned(),
+                Ok(18) => msg.parent_fingerprint = r.read_bytes(bytes)?.to_owned(),
                 Ok(24) => msg.child_num = r.read_uint32(bytes)?,
-                Ok(34) => msg.chain_code = r.read_bytes(bytes).map(Cow::Borrowed)?,
-                Ok(42) => msg.public_key = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(34) => msg.chain_code = r.read_bytes(bytes)?.to_owned(),
+                Ok(42) => msg.public_key = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -116,23 +116,22 @@ impl<'a> MessageRead<'a> for XPub<'a> {
     }
 }
 
-impl<'a> MessageWrite for XPub<'a> {
+impl MessageWrite for XPub {
     fn get_size(&self) -> usize {
         0
-        + if self.depth == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.depth).len()) }
-        + if self.parent_fingerprint == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.parent_fingerprint).len()) }
+        + if self.depth == vec![] { 0 } else { 1 + sizeof_len((&self.depth).len()) }
+        + if self.parent_fingerprint == vec![] { 0 } else { 1 + sizeof_len((&self.parent_fingerprint).len()) }
         + if self.child_num == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.child_num) as u64) }
-        + if self.chain_code == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.chain_code).len()) }
-        + if self.public_key == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.public_key).len()) }
+        + if self.chain_code == vec![] { 0 } else { 1 + sizeof_len((&self.chain_code).len()) }
+        + if self.public_key == vec![] { 0 } else { 1 + sizeof_len((&self.public_key).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.depth != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.depth))?; }
-        if self.parent_fingerprint != Cow::Borrowed(b"") { w.write_with_tag(18, |w| w.write_bytes(&**&self.parent_fingerprint))?; }
+        if self.depth != vec![] { w.write_with_tag(10, |w| w.write_bytes(&**&self.depth))?; }
+        if self.parent_fingerprint != vec![] { w.write_with_tag(18, |w| w.write_bytes(&**&self.parent_fingerprint))?; }
         if self.child_num != 0u32 { w.write_with_tag(24, |w| w.write_uint32(*&self.child_num))?; }
-        if self.chain_code != Cow::Borrowed(b"") { w.write_with_tag(34, |w| w.write_bytes(&**&self.chain_code))?; }
-        if self.public_key != Cow::Borrowed(b"") { w.write_with_tag(42, |w| w.write_bytes(&**&self.public_key))?; }
+        if self.chain_code != vec![] { w.write_with_tag(34, |w| w.write_bytes(&**&self.chain_code))?; }
+        if self.public_key != vec![] { w.write_with_tag(42, |w| w.write_bytes(&**&self.public_key))?; }
         Ok(())
     }
 }
-

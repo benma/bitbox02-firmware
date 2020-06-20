@@ -15,13 +15,26 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-use crate::hww::pb::hww;
 use crate::hww::pb::hww::mod_Request::OneOfrequest;
 use crate::hww::pb::hww::mod_Response::OneOfresponse;
 use crate::hww::pb::hww::{Request, Response};
+use crate::hww::pb::{hww::*, random_number::*};
 
-fn protobuf_encode(response: &Response) -> Vec<u8> {
+fn protobuf_decode(input: &[u8]) -> Result<OneOfrequest, ()> {
+    use quick_protobuf::{BytesReader, MessageRead};
+    let mut reader = BytesReader::from_bytes(input);
+
+    match Request::from_reader(&mut reader, input) {
+        Ok(r) => Ok(r.request),
+        Err(_) => Err(()),
+    }
+}
+
+fn protobuf_encode(response: OneOfresponse) -> Vec<u8> {
     use quick_protobuf::{BytesWriter, MessageWrite, Writer};
+
+    let mut rsp: Response = Default::default();
+    rsp.response = response;
 
     // Same as (USB_DATA_MAX_LEN - 2) (1 byte reserved for HWW_RSP_* code, 1 byte for
     // OP_STATUS_SUCCESS).
@@ -30,32 +43,31 @@ fn protobuf_encode(response: &Response) -> Vec<u8> {
     let mut buf = [0u8; MAX_OUT_LEN - 16];
     let mut writer = Writer::new(BytesWriter::new(&mut buf));
     // Unwrap: if we don't have space for our response, we did someting wrong!
-    response.write_message(&mut writer).unwrap();
-    buf[..response.get_size()].to_vec()
+    rsp.write_message(&mut writer).unwrap();
+    buf[..rsp.get_size()].to_vec()
+}
+
+fn api(request: &OneOfrequest) -> Option<OneOfresponse> {
+    let response = match request {
+        OneOfrequest::random_number(_) => OneOfresponse::random_number(RandomNumberResponse {
+            number: b"................................".to_vec(),
+        }),
+        _ => return None,
+    };
+    Some(response)
 }
 
 pub fn process(input: Vec<u8>) -> Vec<u8> {
-    let request = {
-        use quick_protobuf::{BytesReader, MessageRead};
-        let mut reader = BytesReader::from_bytes(&input[..]);
-
-        match Request::from_reader(&mut reader, &input[..]) {
-            Ok(r) => r.request,
-            Err(_) => {
-                let mut rsp: Response = Default::default();
-                rsp.response = OneOfresponse::success(hww::Success {});
-                return protobuf_encode(&rsp);
-            }
+    let request = match protobuf_decode(&input[..]) {
+        Ok(request) => request,
+        Err(_) => {
+            return protobuf_encode(OneOfresponse::success(Success {}));
         }
     };
 
-    match request {
-        OneOfrequest::random_number(_) => {
-            let mut rsp: Response = Default::default();
-            rsp.response = OneOfresponse::success(hww::Success {});
-            return protobuf_encode(&rsp);
-        }
-        _ => (),
-    };
-    bitbox02::commander::commander(input)
+    match api(&request) {
+        Some(r) => protobuf_encode(r),
+        // Fall back to C commander for all api calls not handled in Rust.
+        _ => bitbox02::commander::commander(input),
+    }
 }

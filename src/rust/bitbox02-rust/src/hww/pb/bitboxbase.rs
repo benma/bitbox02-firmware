@@ -8,9 +8,9 @@
 #![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
-
+use alloc::borrow::ToOwned;
+use alloc::string::String;
 use alloc::vec::Vec;
-use alloc::borrow::Cow;
 use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
@@ -148,16 +148,16 @@ impl<'a> From<&'a str> for DescriptionCode {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BitBoxBaseConfirmPairingRequest<'a> {
-    pub msg: Cow<'a, [u8]>,
+pub struct BitBoxBaseConfirmPairingRequest {
+    pub msg: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for BitBoxBaseConfirmPairingRequest<'a> {
+impl<'a> MessageRead<'a> for BitBoxBaseConfirmPairingRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.msg = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.msg = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -166,35 +166,35 @@ impl<'a> MessageRead<'a> for BitBoxBaseConfirmPairingRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BitBoxBaseConfirmPairingRequest<'a> {
+impl MessageWrite for BitBoxBaseConfirmPairingRequest {
     fn get_size(&self) -> usize {
         0
-        + if self.msg == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.msg).len()) }
+        + if self.msg == vec![] { 0 } else { 1 + sizeof_len((&self.msg).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.msg != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.msg))?; }
+        if self.msg != vec![] { w.write_with_tag(10, |w| w.write_bytes(&**&self.msg))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BitBoxBaseSetConfigRequest<'a> {
+pub struct BitBoxBaseSetConfigRequest {
     pub status_led_mode: mod_BitBoxBaseSetConfigRequest::StatusLedMode,
     pub status_screen_mode: mod_BitBoxBaseSetConfigRequest::StatusScreenMode,
-    pub hostname: Cow<'a, str>,
-    pub ip_option: mod_BitBoxBaseSetConfigRequest::OneOfip_option<'a>,
+    pub hostname: String,
+    pub ip_option: mod_BitBoxBaseSetConfigRequest::OneOfip_option,
 }
 
-impl<'a> MessageRead<'a> for BitBoxBaseSetConfigRequest<'a> {
+impl<'a> MessageRead<'a> for BitBoxBaseSetConfigRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.status_led_mode = r.read_enum(bytes)?,
                 Ok(16) => msg.status_screen_mode = r.read_enum(bytes)?,
-                Ok(34) => msg.hostname = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(26) => msg.ip_option = mod_BitBoxBaseSetConfigRequest::OneOfip_option::ip(r.read_bytes(bytes).map(Cow::Borrowed)?),
+                Ok(34) => msg.hostname = r.read_string(bytes)?.to_owned(),
+                Ok(26) => msg.ip_option = mod_BitBoxBaseSetConfigRequest::OneOfip_option::ip(r.read_bytes(bytes)?.to_owned()),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -203,12 +203,12 @@ impl<'a> MessageRead<'a> for BitBoxBaseSetConfigRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BitBoxBaseSetConfigRequest<'a> {
+impl MessageWrite for BitBoxBaseSetConfigRequest {
     fn get_size(&self) -> usize {
         0
         + if self.status_led_mode == bitboxbase::mod_BitBoxBaseSetConfigRequest::StatusLedMode::LED_ALWAYS { 0 } else { 1 + sizeof_varint(*(&self.status_led_mode) as u64) }
         + if self.status_screen_mode == bitboxbase::mod_BitBoxBaseSetConfigRequest::StatusScreenMode::SCREEN_ALWAYS { 0 } else { 1 + sizeof_varint(*(&self.status_screen_mode) as u64) }
-        + if self.hostname == "" { 0 } else { 1 + sizeof_len((&self.hostname).len()) }
+        + if self.hostname == String::default() { 0 } else { 1 + sizeof_len((&self.hostname).len()) }
         + match self.ip_option {
             mod_BitBoxBaseSetConfigRequest::OneOfip_option::ip(ref m) => 1 + sizeof_len((m).len()),
             mod_BitBoxBaseSetConfigRequest::OneOfip_option::None => 0,
@@ -217,7 +217,7 @@ impl<'a> MessageWrite for BitBoxBaseSetConfigRequest<'a> {
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.status_led_mode != bitboxbase::mod_BitBoxBaseSetConfigRequest::StatusLedMode::LED_ALWAYS { w.write_with_tag(8, |w| w.write_enum(*&self.status_led_mode as i32))?; }
         if self.status_screen_mode != bitboxbase::mod_BitBoxBaseSetConfigRequest::StatusScreenMode::SCREEN_ALWAYS { w.write_with_tag(16, |w| w.write_enum(*&self.status_screen_mode as i32))?; }
-        if self.hostname != "" { w.write_with_tag(34, |w| w.write_string(&**&self.hostname))?; }
+        if self.hostname != String::default() { w.write_with_tag(34, |w| w.write_string(&**&self.hostname))?; }
         match self.ip_option {            mod_BitBoxBaseSetConfigRequest::OneOfip_option::ip(ref m) => { w.write_with_tag(26, |w| w.write_bytes(&**m))? },
             mod_BitBoxBaseSetConfigRequest::OneOfip_option::None => {},
     }        Ok(())
@@ -306,12 +306,12 @@ impl<'a> From<&'a str> for StatusScreenMode {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum OneOfip_option<'a> {
-    ip(Cow<'a, [u8]>),
+pub enum OneOfip_option {
+    ip(Vec<u8>),
     None,
 }
 
-impl<'a> Default for OneOfip_option<'a> {
+impl Default for OneOfip_option {
     fn default() -> Self {
         OneOfip_option::None
     }
@@ -351,11 +351,11 @@ impl MessageWrite for BitBoxBaseDisplayStatusRequest {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BitBoxBaseRequest<'a> {
-    pub request: mod_BitBoxBaseRequest::OneOfrequest<'a>,
+pub struct BitBoxBaseRequest {
+    pub request: mod_BitBoxBaseRequest::OneOfrequest,
 }
 
-impl<'a> MessageRead<'a> for BitBoxBaseRequest<'a> {
+impl<'a> MessageRead<'a> for BitBoxBaseRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -372,7 +372,7 @@ impl<'a> MessageRead<'a> for BitBoxBaseRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BitBoxBaseRequest<'a> {
+impl MessageWrite for BitBoxBaseRequest {
     fn get_size(&self) -> usize {
         0
         + match self.request {
@@ -399,19 +399,18 @@ use alloc::vec::Vec;
 use super::*;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum OneOfrequest<'a> {
+pub enum OneOfrequest {
     heartbeat(BitBoxBaseHeartbeatRequest),
-    set_config(BitBoxBaseSetConfigRequest<'a>),
-    confirm_pairing(BitBoxBaseConfirmPairingRequest<'a>),
+    set_config(BitBoxBaseSetConfigRequest),
+    confirm_pairing(BitBoxBaseConfirmPairingRequest),
     display_status(BitBoxBaseDisplayStatusRequest),
     None,
 }
 
-impl<'a> Default for OneOfrequest<'a> {
+impl Default for OneOfrequest {
     fn default() -> Self {
         OneOfrequest::None
     }
 }
 
 }
-

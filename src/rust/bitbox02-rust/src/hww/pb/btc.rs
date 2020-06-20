@@ -8,9 +8,9 @@
 #![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
-
+use alloc::borrow::ToOwned;
+use alloc::string::String;
 use alloc::vec::Vec;
-use alloc::borrow::Cow;
 use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
@@ -95,11 +95,11 @@ impl<'a> From<&'a str> for BTCOutputType {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCScriptConfig<'a> {
-    pub config: mod_BTCScriptConfig::OneOfconfig<'a>,
+pub struct BTCScriptConfig {
+    pub config: mod_BTCScriptConfig::OneOfconfig,
 }
 
-impl<'a> MessageRead<'a> for BTCScriptConfig<'a> {
+impl<'a> MessageRead<'a> for BTCScriptConfig {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -114,7 +114,7 @@ impl<'a> MessageRead<'a> for BTCScriptConfig<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCScriptConfig<'a> {
+impl MessageWrite for BTCScriptConfig {
     fn get_size(&self) -> usize {
         0
         + match self.config {
@@ -137,13 +137,13 @@ use alloc::vec::Vec;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct Multisig<'a> {
+pub struct Multisig {
     pub threshold: u32,
-    pub xpubs: Vec<common::XPub<'a>>,
+    pub xpubs: Vec<common::XPub>,
     pub our_xpub_index: u32,
 }
 
-impl<'a> MessageRead<'a> for Multisig<'a> {
+impl<'a> MessageRead<'a> for Multisig {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -159,7 +159,7 @@ impl<'a> MessageRead<'a> for Multisig<'a> {
     }
 }
 
-impl<'a> MessageWrite for Multisig<'a> {
+impl MessageWrite for Multisig {
     fn get_size(&self) -> usize {
         0
         + if self.threshold == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.threshold) as u64) }
@@ -208,13 +208,13 @@ impl<'a> From<&'a str> for SimpleType {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum OneOfconfig<'a> {
+pub enum OneOfconfig {
     simple_type(mod_BTCScriptConfig::SimpleType),
-    multisig(mod_BTCScriptConfig::Multisig<'a>),
+    multisig(mod_BTCScriptConfig::Multisig),
     None,
 }
 
-impl<'a> Default for OneOfconfig<'a> {
+impl Default for OneOfconfig {
     fn default() -> Self {
         OneOfconfig::None
     }
@@ -223,14 +223,14 @@ impl<'a> Default for OneOfconfig<'a> {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCPubRequest<'a> {
+pub struct BTCPubRequest {
     pub coin: BTCCoin,
     pub keypath: Vec<u32>,
     pub display: bool,
-    pub output: mod_BTCPubRequest::OneOfoutput<'a>,
+    pub output: mod_BTCPubRequest::OneOfoutput,
 }
 
-impl<'a> MessageRead<'a> for BTCPubRequest<'a> {
+impl<'a> MessageRead<'a> for BTCPubRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -248,7 +248,7 @@ impl<'a> MessageRead<'a> for BTCPubRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCPubRequest<'a> {
+impl MessageWrite for BTCPubRequest {
     fn get_size(&self) -> usize {
         0
         + if self.coin == btc::BTCCoin::BTC { 0 } else { 1 + sizeof_varint(*(&self.coin) as u64) }
@@ -327,13 +327,13 @@ impl<'a> From<&'a str> for XPubType {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum OneOfoutput<'a> {
+pub enum OneOfoutput {
     xpub_type(mod_BTCPubRequest::XPubType),
-    script_config(BTCScriptConfig<'a>),
+    script_config(BTCScriptConfig),
     None,
 }
 
-impl<'a> Default for OneOfoutput<'a> {
+impl Default for OneOfoutput {
     fn default() -> Self {
         OneOfoutput::None
     }
@@ -342,12 +342,12 @@ impl<'a> Default for OneOfoutput<'a> {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCScriptConfigWithKeypath<'a> {
-    pub script_config: Option<BTCScriptConfig<'a>>,
+pub struct BTCScriptConfigWithKeypath {
+    pub script_config: Option<BTCScriptConfig>,
     pub keypath: Vec<u32>,
 }
 
-impl<'a> MessageRead<'a> for BTCScriptConfigWithKeypath<'a> {
+impl<'a> MessageRead<'a> for BTCScriptConfigWithKeypath {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -362,7 +362,7 @@ impl<'a> MessageRead<'a> for BTCScriptConfigWithKeypath<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCScriptConfigWithKeypath<'a> {
+impl MessageWrite for BTCScriptConfigWithKeypath {
     fn get_size(&self) -> usize {
         0
         + self.script_config.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
@@ -377,16 +377,16 @@ impl<'a> MessageWrite for BTCScriptConfigWithKeypath<'a> {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCSignInitRequest<'a> {
+pub struct BTCSignInitRequest {
     pub coin: BTCCoin,
-    pub script_configs: Vec<BTCScriptConfigWithKeypath<'a>>,
+    pub script_configs: Vec<BTCScriptConfigWithKeypath>,
     pub version: u32,
     pub num_inputs: u32,
     pub num_outputs: u32,
     pub locktime: u32,
 }
 
-impl<'a> MessageRead<'a> for BTCSignInitRequest<'a> {
+impl<'a> MessageRead<'a> for BTCSignInitRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -405,7 +405,7 @@ impl<'a> MessageRead<'a> for BTCSignInitRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCSignInitRequest<'a> {
+impl MessageWrite for BTCSignInitRequest {
     fn get_size(&self) -> usize {
         0
         + if self.coin == btc::BTCCoin::BTC { 0 } else { 1 + sizeof_varint(*(&self.coin) as u64) }
@@ -428,15 +428,15 @@ impl<'a> MessageWrite for BTCSignInitRequest<'a> {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCSignNextResponse<'a> {
+pub struct BTCSignNextResponse {
     pub type_pb: mod_BTCSignNextResponse::Type,
     pub index: u32,
     pub has_signature: bool,
-    pub signature: Cow<'a, [u8]>,
+    pub signature: Vec<u8>,
     pub prev_index: u32,
 }
 
-impl<'a> MessageRead<'a> for BTCSignNextResponse<'a> {
+impl<'a> MessageRead<'a> for BTCSignNextResponse {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -444,7 +444,7 @@ impl<'a> MessageRead<'a> for BTCSignNextResponse<'a> {
                 Ok(8) => msg.type_pb = r.read_enum(bytes)?,
                 Ok(16) => msg.index = r.read_uint32(bytes)?,
                 Ok(24) => msg.has_signature = r.read_bool(bytes)?,
-                Ok(34) => msg.signature = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(34) => msg.signature = r.read_bytes(bytes)?.to_owned(),
                 Ok(40) => msg.prev_index = r.read_uint32(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -454,13 +454,13 @@ impl<'a> MessageRead<'a> for BTCSignNextResponse<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCSignNextResponse<'a> {
+impl MessageWrite for BTCSignNextResponse {
     fn get_size(&self) -> usize {
         0
         + if self.type_pb == btc::mod_BTCSignNextResponse::Type::INPUT { 0 } else { 1 + sizeof_varint(*(&self.type_pb) as u64) }
         + if self.index == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.index) as u64) }
         + if self.has_signature == false { 0 } else { 1 + sizeof_varint(*(&self.has_signature) as u64) }
-        + if self.signature == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.signature).len()) }
+        + if self.signature == vec![] { 0 } else { 1 + sizeof_len((&self.signature).len()) }
         + if self.prev_index == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.prev_index) as u64) }
     }
 
@@ -468,7 +468,7 @@ impl<'a> MessageWrite for BTCSignNextResponse<'a> {
         if self.type_pb != btc::mod_BTCSignNextResponse::Type::INPUT { w.write_with_tag(8, |w| w.write_enum(*&self.type_pb as i32))?; }
         if self.index != 0u32 { w.write_with_tag(16, |w| w.write_uint32(*&self.index))?; }
         if self.has_signature != false { w.write_with_tag(24, |w| w.write_bool(*&self.has_signature))?; }
-        if self.signature != Cow::Borrowed(b"") { w.write_with_tag(34, |w| w.write_bytes(&**&self.signature))?; }
+        if self.signature != vec![] { w.write_with_tag(34, |w| w.write_bytes(&**&self.signature))?; }
         if self.prev_index != 0u32 { w.write_with_tag(40, |w| w.write_uint32(*&self.prev_index))?; }
         Ok(())
     }
@@ -525,8 +525,8 @@ impl<'a> From<&'a str> for Type {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCSignInputRequest<'a> {
-    pub prevOutHash: Cow<'a, [u8]>,
+pub struct BTCSignInputRequest {
+    pub prevOutHash: Vec<u8>,
     pub prevOutIndex: u32,
     pub prevOutValue: u64,
     pub sequence: u32,
@@ -534,12 +534,12 @@ pub struct BTCSignInputRequest<'a> {
     pub script_config_index: u32,
 }
 
-impl<'a> MessageRead<'a> for BTCSignInputRequest<'a> {
+impl<'a> MessageRead<'a> for BTCSignInputRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.prevOutHash = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.prevOutHash = r.read_bytes(bytes)?.to_owned(),
                 Ok(16) => msg.prevOutIndex = r.read_uint32(bytes)?,
                 Ok(24) => msg.prevOutValue = r.read_uint64(bytes)?,
                 Ok(32) => msg.sequence = r.read_uint32(bytes)?,
@@ -553,10 +553,10 @@ impl<'a> MessageRead<'a> for BTCSignInputRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCSignInputRequest<'a> {
+impl MessageWrite for BTCSignInputRequest {
     fn get_size(&self) -> usize {
         0
-        + if self.prevOutHash == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.prevOutHash).len()) }
+        + if self.prevOutHash == vec![] { 0 } else { 1 + sizeof_len((&self.prevOutHash).len()) }
         + if self.prevOutIndex == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.prevOutIndex) as u64) }
         + if self.prevOutValue == 0u64 { 0 } else { 1 + sizeof_varint(*(&self.prevOutValue) as u64) }
         + if self.sequence == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.sequence) as u64) }
@@ -565,7 +565,7 @@ impl<'a> MessageWrite for BTCSignInputRequest<'a> {
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.prevOutHash != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.prevOutHash))?; }
+        if self.prevOutHash != vec![] { w.write_with_tag(10, |w| w.write_bytes(&**&self.prevOutHash))?; }
         if self.prevOutIndex != 0u32 { w.write_with_tag(16, |w| w.write_uint32(*&self.prevOutIndex))?; }
         if self.prevOutValue != 0u64 { w.write_with_tag(24, |w| w.write_uint64(*&self.prevOutValue))?; }
         if self.sequence != 0u32 { w.write_with_tag(32, |w| w.write_uint32(*&self.sequence))?; }
@@ -576,16 +576,16 @@ impl<'a> MessageWrite for BTCSignInputRequest<'a> {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCSignOutputRequest<'a> {
+pub struct BTCSignOutputRequest {
     pub ours: bool,
     pub type_pb: BTCOutputType,
     pub value: u64,
-    pub hash: Cow<'a, [u8]>,
+    pub hash: Vec<u8>,
     pub keypath: Vec<u32>,
     pub script_config_index: u32,
 }
 
-impl<'a> MessageRead<'a> for BTCSignOutputRequest<'a> {
+impl<'a> MessageRead<'a> for BTCSignOutputRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -593,7 +593,7 @@ impl<'a> MessageRead<'a> for BTCSignOutputRequest<'a> {
                 Ok(8) => msg.ours = r.read_bool(bytes)?,
                 Ok(16) => msg.type_pb = r.read_enum(bytes)?,
                 Ok(24) => msg.value = r.read_uint64(bytes)?,
-                Ok(34) => msg.hash = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(34) => msg.hash = r.read_bytes(bytes)?.to_owned(),
                 Ok(42) => msg.keypath = r.read_packed(bytes, |r, bytes| Ok(r.read_uint32(bytes)?))?,
                 Ok(48) => msg.script_config_index = r.read_uint32(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -604,13 +604,13 @@ impl<'a> MessageRead<'a> for BTCSignOutputRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCSignOutputRequest<'a> {
+impl MessageWrite for BTCSignOutputRequest {
     fn get_size(&self) -> usize {
         0
         + if self.ours == false { 0 } else { 1 + sizeof_varint(*(&self.ours) as u64) }
         + if self.type_pb == btc::BTCOutputType::UNKNOWN { 0 } else { 1 + sizeof_varint(*(&self.type_pb) as u64) }
         + if self.value == 0u64 { 0 } else { 1 + sizeof_varint(*(&self.value) as u64) }
-        + if self.hash == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.hash).len()) }
+        + if self.hash == vec![] { 0 } else { 1 + sizeof_len((&self.hash).len()) }
         + if self.keypath.is_empty() { 0 } else { 1 + sizeof_len(self.keypath.iter().map(|s| sizeof_varint(*(s) as u64)).sum::<usize>()) }
         + if self.script_config_index == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.script_config_index) as u64) }
     }
@@ -619,7 +619,7 @@ impl<'a> MessageWrite for BTCSignOutputRequest<'a> {
         if self.ours != false { w.write_with_tag(8, |w| w.write_bool(*&self.ours))?; }
         if self.type_pb != btc::BTCOutputType::UNKNOWN { w.write_with_tag(16, |w| w.write_enum(*&self.type_pb as i32))?; }
         if self.value != 0u64 { w.write_with_tag(24, |w| w.write_uint64(*&self.value))?; }
-        if self.hash != Cow::Borrowed(b"") { w.write_with_tag(34, |w| w.write_bytes(&**&self.hash))?; }
+        if self.hash != vec![] { w.write_with_tag(34, |w| w.write_bytes(&**&self.hash))?; }
         w.write_packed_with_tag(42, &self.keypath, |w, m| w.write_uint32(*m), &|m| sizeof_varint(*(m) as u64))?;
         if self.script_config_index != 0u32 { w.write_with_tag(48, |w| w.write_uint32(*&self.script_config_index))?; }
         Ok(())
@@ -627,13 +627,13 @@ impl<'a> MessageWrite for BTCSignOutputRequest<'a> {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCScriptConfigRegistration<'a> {
+pub struct BTCScriptConfigRegistration {
     pub coin: BTCCoin,
-    pub script_config: Option<BTCScriptConfig<'a>>,
+    pub script_config: Option<BTCScriptConfig>,
     pub keypath: Vec<u32>,
 }
 
-impl<'a> MessageRead<'a> for BTCScriptConfigRegistration<'a> {
+impl<'a> MessageRead<'a> for BTCScriptConfigRegistration {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -649,7 +649,7 @@ impl<'a> MessageRead<'a> for BTCScriptConfigRegistration<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCScriptConfigRegistration<'a> {
+impl MessageWrite for BTCScriptConfigRegistration {
     fn get_size(&self) -> usize {
         0
         + if self.coin == btc::BTCCoin::BTC { 0 } else { 1 + sizeof_varint(*(&self.coin) as u64) }
@@ -678,11 +678,11 @@ impl<'a> MessageRead<'a> for BTCSuccess {
 impl MessageWrite for BTCSuccess { }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCIsScriptConfigRegisteredRequest<'a> {
-    pub registration: Option<BTCScriptConfigRegistration<'a>>,
+pub struct BTCIsScriptConfigRegisteredRequest {
+    pub registration: Option<BTCScriptConfigRegistration>,
 }
 
-impl<'a> MessageRead<'a> for BTCIsScriptConfigRegisteredRequest<'a> {
+impl<'a> MessageRead<'a> for BTCIsScriptConfigRegisteredRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -696,7 +696,7 @@ impl<'a> MessageRead<'a> for BTCIsScriptConfigRegisteredRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCIsScriptConfigRegisteredRequest<'a> {
+impl MessageWrite for BTCIsScriptConfigRegisteredRequest {
     fn get_size(&self) -> usize {
         0
         + self.registration.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
@@ -740,18 +740,18 @@ impl MessageWrite for BTCIsScriptConfigRegisteredResponse {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCRegisterScriptConfigRequest<'a> {
-    pub registration: Option<BTCScriptConfigRegistration<'a>>,
-    pub name: Cow<'a, str>,
+pub struct BTCRegisterScriptConfigRequest {
+    pub registration: Option<BTCScriptConfigRegistration>,
+    pub name: String,
 }
 
-impl<'a> MessageRead<'a> for BTCRegisterScriptConfigRequest<'a> {
+impl<'a> MessageRead<'a> for BTCRegisterScriptConfigRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(10) => msg.registration = Some(r.read_message::<BTCScriptConfigRegistration>(bytes)?),
-                Ok(18) => msg.name = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(18) => msg.name = r.read_string(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -760,16 +760,16 @@ impl<'a> MessageRead<'a> for BTCRegisterScriptConfigRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCRegisterScriptConfigRequest<'a> {
+impl MessageWrite for BTCRegisterScriptConfigRequest {
     fn get_size(&self) -> usize {
         0
         + self.registration.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
-        + if self.name == "" { 0 } else { 1 + sizeof_len((&self.name).len()) }
+        + if self.name == String::default() { 0 } else { 1 + sizeof_len((&self.name).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.registration { w.write_with_tag(10, |w| w.write_message(s))?; }
-        if self.name != "" { w.write_with_tag(18, |w| w.write_string(&**&self.name))?; }
+        if self.name != String::default() { w.write_with_tag(18, |w| w.write_string(&**&self.name))?; }
         Ok(())
     }
 }
@@ -818,21 +818,21 @@ impl MessageWrite for BTCPrevTxInitRequest {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCPrevTxInputRequest<'a> {
-    pub prev_out_hash: Cow<'a, [u8]>,
+pub struct BTCPrevTxInputRequest {
+    pub prev_out_hash: Vec<u8>,
     pub prev_out_index: u32,
-    pub signature_script: Cow<'a, [u8]>,
+    pub signature_script: Vec<u8>,
     pub sequence: u32,
 }
 
-impl<'a> MessageRead<'a> for BTCPrevTxInputRequest<'a> {
+impl<'a> MessageRead<'a> for BTCPrevTxInputRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.prev_out_hash = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.prev_out_hash = r.read_bytes(bytes)?.to_owned(),
                 Ok(16) => msg.prev_out_index = r.read_uint32(bytes)?,
-                Ok(26) => msg.signature_script = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(26) => msg.signature_script = r.read_bytes(bytes)?.to_owned(),
                 Ok(32) => msg.sequence = r.read_uint32(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -842,37 +842,37 @@ impl<'a> MessageRead<'a> for BTCPrevTxInputRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCPrevTxInputRequest<'a> {
+impl MessageWrite for BTCPrevTxInputRequest {
     fn get_size(&self) -> usize {
         0
-        + if self.prev_out_hash == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.prev_out_hash).len()) }
+        + if self.prev_out_hash == vec![] { 0 } else { 1 + sizeof_len((&self.prev_out_hash).len()) }
         + if self.prev_out_index == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.prev_out_index) as u64) }
-        + if self.signature_script == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.signature_script).len()) }
+        + if self.signature_script == vec![] { 0 } else { 1 + sizeof_len((&self.signature_script).len()) }
         + if self.sequence == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.sequence) as u64) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.prev_out_hash != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.prev_out_hash))?; }
+        if self.prev_out_hash != vec![] { w.write_with_tag(10, |w| w.write_bytes(&**&self.prev_out_hash))?; }
         if self.prev_out_index != 0u32 { w.write_with_tag(16, |w| w.write_uint32(*&self.prev_out_index))?; }
-        if self.signature_script != Cow::Borrowed(b"") { w.write_with_tag(26, |w| w.write_bytes(&**&self.signature_script))?; }
+        if self.signature_script != vec![] { w.write_with_tag(26, |w| w.write_bytes(&**&self.signature_script))?; }
         if self.sequence != 0u32 { w.write_with_tag(32, |w| w.write_uint32(*&self.sequence))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCPrevTxOutputRequest<'a> {
+pub struct BTCPrevTxOutputRequest {
     pub value: u64,
-    pub pubkey_script: Cow<'a, [u8]>,
+    pub pubkey_script: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for BTCPrevTxOutputRequest<'a> {
+impl<'a> MessageRead<'a> for BTCPrevTxOutputRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.value = r.read_uint64(bytes)?,
-                Ok(18) => msg.pubkey_script = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(18) => msg.pubkey_script = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -881,26 +881,26 @@ impl<'a> MessageRead<'a> for BTCPrevTxOutputRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCPrevTxOutputRequest<'a> {
+impl MessageWrite for BTCPrevTxOutputRequest {
     fn get_size(&self) -> usize {
         0
         + if self.value == 0u64 { 0 } else { 1 + sizeof_varint(*(&self.value) as u64) }
-        + if self.pubkey_script == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.pubkey_script).len()) }
+        + if self.pubkey_script == vec![] { 0 } else { 1 + sizeof_len((&self.pubkey_script).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.value != 0u64 { w.write_with_tag(8, |w| w.write_uint64(*&self.value))?; }
-        if self.pubkey_script != Cow::Borrowed(b"") { w.write_with_tag(18, |w| w.write_bytes(&**&self.pubkey_script))?; }
+        if self.pubkey_script != vec![] { w.write_with_tag(18, |w| w.write_bytes(&**&self.pubkey_script))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCRequest<'a> {
-    pub request: mod_BTCRequest::OneOfrequest<'a>,
+pub struct BTCRequest {
+    pub request: mod_BTCRequest::OneOfrequest,
 }
 
-impl<'a> MessageRead<'a> for BTCRequest<'a> {
+impl<'a> MessageRead<'a> for BTCRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -918,7 +918,7 @@ impl<'a> MessageRead<'a> for BTCRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCRequest<'a> {
+impl MessageWrite for BTCRequest {
     fn get_size(&self) -> usize {
         0
         + match self.request {
@@ -947,16 +947,16 @@ use alloc::vec::Vec;
 use super::*;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum OneOfrequest<'a> {
-    is_script_config_registered(BTCIsScriptConfigRegisteredRequest<'a>),
-    register_script_config(BTCRegisterScriptConfigRequest<'a>),
+pub enum OneOfrequest {
+    is_script_config_registered(BTCIsScriptConfigRegisteredRequest),
+    register_script_config(BTCRegisterScriptConfigRequest),
     prevtx_init(BTCPrevTxInitRequest),
-    prevtx_input(BTCPrevTxInputRequest<'a>),
-    prevtx_output(BTCPrevTxOutputRequest<'a>),
+    prevtx_input(BTCPrevTxInputRequest),
+    prevtx_output(BTCPrevTxOutputRequest),
     None,
 }
 
-impl<'a> Default for OneOfrequest<'a> {
+impl Default for OneOfrequest {
     fn default() -> Self {
         OneOfrequest::None
     }
@@ -965,11 +965,11 @@ impl<'a> Default for OneOfrequest<'a> {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct BTCResponse<'a> {
-    pub response: mod_BTCResponse::OneOfresponse<'a>,
+pub struct BTCResponse {
+    pub response: mod_BTCResponse::OneOfresponse,
 }
 
-impl<'a> MessageRead<'a> for BTCResponse<'a> {
+impl<'a> MessageRead<'a> for BTCResponse {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -985,7 +985,7 @@ impl<'a> MessageRead<'a> for BTCResponse<'a> {
     }
 }
 
-impl<'a> MessageWrite for BTCResponse<'a> {
+impl MessageWrite for BTCResponse {
     fn get_size(&self) -> usize {
         0
         + match self.response {
@@ -1010,18 +1010,17 @@ use alloc::vec::Vec;
 use super::*;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum OneOfresponse<'a> {
+pub enum OneOfresponse {
     success(BTCSuccess),
     is_script_config_registered(BTCIsScriptConfigRegisteredResponse),
-    sign_next(BTCSignNextResponse<'a>),
+    sign_next(BTCSignNextResponse),
     None,
 }
 
-impl<'a> Default for OneOfresponse<'a> {
+impl Default for OneOfresponse {
     fn default() -> Self {
         OneOfresponse::None
     }
 }
 
 }
-

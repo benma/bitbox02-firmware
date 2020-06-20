@@ -8,9 +8,9 @@
 #![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
-
+use alloc::borrow::ToOwned;
+use alloc::string::String;
 use alloc::vec::Vec;
-use alloc::borrow::Cow;
 use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
@@ -71,22 +71,22 @@ impl<'a> MessageRead<'a> for DeviceInfoRequest {
 impl MessageWrite for DeviceInfoRequest { }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct DeviceInfoResponse<'a> {
-    pub name: Cow<'a, str>,
+pub struct DeviceInfoResponse {
+    pub name: String,
     pub initialized: bool,
-    pub version: Cow<'a, str>,
+    pub version: String,
     pub mnemonic_passphrase_enabled: bool,
     pub monotonic_increments_remaining: u32,
 }
 
-impl<'a> MessageRead<'a> for DeviceInfoResponse<'a> {
+impl<'a> MessageRead<'a> for DeviceInfoResponse {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.name = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.name = r.read_string(bytes)?.to_owned(),
                 Ok(16) => msg.initialized = r.read_bool(bytes)?,
-                Ok(26) => msg.version = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(26) => msg.version = r.read_string(bytes)?.to_owned(),
                 Ok(32) => msg.mnemonic_passphrase_enabled = r.read_bool(bytes)?,
                 Ok(40) => msg.monotonic_increments_remaining = r.read_uint32(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -97,20 +97,20 @@ impl<'a> MessageRead<'a> for DeviceInfoResponse<'a> {
     }
 }
 
-impl<'a> MessageWrite for DeviceInfoResponse<'a> {
+impl MessageWrite for DeviceInfoResponse {
     fn get_size(&self) -> usize {
         0
-        + if self.name == "" { 0 } else { 1 + sizeof_len((&self.name).len()) }
+        + if self.name == String::default() { 0 } else { 1 + sizeof_len((&self.name).len()) }
         + if self.initialized == false { 0 } else { 1 + sizeof_varint(*(&self.initialized) as u64) }
-        + if self.version == "" { 0 } else { 1 + sizeof_len((&self.version).len()) }
+        + if self.version == String::default() { 0 } else { 1 + sizeof_len((&self.version).len()) }
         + if self.mnemonic_passphrase_enabled == false { 0 } else { 1 + sizeof_varint(*(&self.mnemonic_passphrase_enabled) as u64) }
         + if self.monotonic_increments_remaining == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.monotonic_increments_remaining) as u64) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.name != "" { w.write_with_tag(10, |w| w.write_string(&**&self.name))?; }
+        if self.name != String::default() { w.write_with_tag(10, |w| w.write_string(&**&self.name))?; }
         if self.initialized != false { w.write_with_tag(16, |w| w.write_bool(*&self.initialized))?; }
-        if self.version != "" { w.write_with_tag(26, |w| w.write_string(&**&self.version))?; }
+        if self.version != String::default() { w.write_with_tag(26, |w| w.write_string(&**&self.version))?; }
         if self.mnemonic_passphrase_enabled != false { w.write_with_tag(32, |w| w.write_bool(*&self.mnemonic_passphrase_enabled))?; }
         if self.monotonic_increments_remaining != 0u32 { w.write_with_tag(40, |w| w.write_uint32(*&self.monotonic_increments_remaining))?; }
         Ok(())
@@ -199,16 +199,16 @@ impl<'a> MessageRead<'a> for ResetRequest {
 impl MessageWrite for ResetRequest { }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct SetDeviceLanguageRequest<'a> {
-    pub language: Cow<'a, str>,
+pub struct SetDeviceLanguageRequest {
+    pub language: String,
 }
 
-impl<'a> MessageRead<'a> for SetDeviceLanguageRequest<'a> {
+impl<'a> MessageRead<'a> for SetDeviceLanguageRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.language = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.language = r.read_string(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -217,29 +217,29 @@ impl<'a> MessageRead<'a> for SetDeviceLanguageRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for SetDeviceLanguageRequest<'a> {
+impl MessageWrite for SetDeviceLanguageRequest {
     fn get_size(&self) -> usize {
         0
-        + if self.language == "" { 0 } else { 1 + sizeof_len((&self.language).len()) }
+        + if self.language == String::default() { 0 } else { 1 + sizeof_len((&self.language).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.language != "" { w.write_with_tag(10, |w| w.write_string(&**&self.language))?; }
+        if self.language != String::default() { w.write_with_tag(10, |w| w.write_string(&**&self.language))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct SetDeviceNameRequest<'a> {
-    pub name: Cow<'a, str>,
+pub struct SetDeviceNameRequest {
+    pub name: String,
 }
 
-impl<'a> MessageRead<'a> for SetDeviceNameRequest<'a> {
+impl<'a> MessageRead<'a> for SetDeviceNameRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.name = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.name = r.read_string(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -248,29 +248,29 @@ impl<'a> MessageRead<'a> for SetDeviceNameRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for SetDeviceNameRequest<'a> {
+impl MessageWrite for SetDeviceNameRequest {
     fn get_size(&self) -> usize {
         0
-        + if self.name == "" { 0 } else { 1 + sizeof_len((&self.name).len()) }
+        + if self.name == String::default() { 0 } else { 1 + sizeof_len((&self.name).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.name != "" { w.write_with_tag(10, |w| w.write_string(&**&self.name))?; }
+        if self.name != String::default() { w.write_with_tag(10, |w| w.write_string(&**&self.name))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct SetPasswordRequest<'a> {
-    pub entropy: Cow<'a, [u8]>,
+pub struct SetPasswordRequest {
+    pub entropy: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for SetPasswordRequest<'a> {
+impl<'a> MessageRead<'a> for SetPasswordRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.entropy = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.entropy = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -279,15 +279,14 @@ impl<'a> MessageRead<'a> for SetPasswordRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for SetPasswordRequest<'a> {
+impl MessageWrite for SetPasswordRequest {
     fn get_size(&self) -> usize {
         0
-        + if self.entropy == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.entropy).len()) }
+        + if self.entropy == vec![] { 0 } else { 1 + sizeof_len((&self.entropy).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.entropy != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.entropy))?; }
+        if self.entropy != vec![] { w.write_with_tag(10, |w| w.write_bytes(&**&self.entropy))?; }
         Ok(())
     }
 }
-

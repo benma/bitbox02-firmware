@@ -8,9 +8,9 @@
 #![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
-
+use alloc::borrow::ToOwned;
+use alloc::string::String;
 use alloc::vec::Vec;
-use alloc::borrow::Cow;
 use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
@@ -51,15 +51,15 @@ impl<'a> From<&'a str> for ETHCoin {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct ETHPubRequest<'a> {
+pub struct ETHPubRequest {
     pub keypath: Vec<u32>,
     pub coin: ETHCoin,
     pub output_type: mod_ETHPubRequest::OutputType,
     pub display: bool,
-    pub contract_address: Cow<'a, [u8]>,
+    pub contract_address: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for ETHPubRequest<'a> {
+impl<'a> MessageRead<'a> for ETHPubRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -68,7 +68,7 @@ impl<'a> MessageRead<'a> for ETHPubRequest<'a> {
                 Ok(16) => msg.coin = r.read_enum(bytes)?,
                 Ok(24) => msg.output_type = r.read_enum(bytes)?,
                 Ok(32) => msg.display = r.read_bool(bytes)?,
-                Ok(42) => msg.contract_address = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(42) => msg.contract_address = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -77,14 +77,14 @@ impl<'a> MessageRead<'a> for ETHPubRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for ETHPubRequest<'a> {
+impl MessageWrite for ETHPubRequest {
     fn get_size(&self) -> usize {
         0
         + if self.keypath.is_empty() { 0 } else { 1 + sizeof_len(self.keypath.iter().map(|s| sizeof_varint(*(s) as u64)).sum::<usize>()) }
         + if self.coin == eth::ETHCoin::ETH { 0 } else { 1 + sizeof_varint(*(&self.coin) as u64) }
         + if self.output_type == eth::mod_ETHPubRequest::OutputType::ADDRESS { 0 } else { 1 + sizeof_varint(*(&self.output_type) as u64) }
         + if self.display == false { 0 } else { 1 + sizeof_varint(*(&self.display) as u64) }
-        + if self.contract_address == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.contract_address).len()) }
+        + if self.contract_address == vec![] { 0 } else { 1 + sizeof_len((&self.contract_address).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -92,7 +92,7 @@ impl<'a> MessageWrite for ETHPubRequest<'a> {
         if self.coin != eth::ETHCoin::ETH { w.write_with_tag(16, |w| w.write_enum(*&self.coin as i32))?; }
         if self.output_type != eth::mod_ETHPubRequest::OutputType::ADDRESS { w.write_with_tag(24, |w| w.write_enum(*&self.output_type as i32))?; }
         if self.display != false { w.write_with_tag(32, |w| w.write_bool(*&self.display))?; }
-        if self.contract_address != Cow::Borrowed(b"") { w.write_with_tag(42, |w| w.write_bytes(&**&self.contract_address))?; }
+        if self.contract_address != vec![] { w.write_with_tag(42, |w| w.write_bytes(&**&self.contract_address))?; }
         Ok(())
     }
 }
@@ -136,30 +136,30 @@ impl<'a> From<&'a str> for OutputType {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct ETHSignRequest<'a> {
+pub struct ETHSignRequest {
     pub coin: ETHCoin,
     pub keypath: Vec<u32>,
-    pub nonce: Cow<'a, [u8]>,
-    pub gas_price: Cow<'a, [u8]>,
-    pub gas_limit: Cow<'a, [u8]>,
-    pub recipient: Cow<'a, [u8]>,
-    pub value: Cow<'a, [u8]>,
-    pub data: Cow<'a, [u8]>,
+    pub nonce: Vec<u8>,
+    pub gas_price: Vec<u8>,
+    pub gas_limit: Vec<u8>,
+    pub recipient: Vec<u8>,
+    pub value: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for ETHSignRequest<'a> {
+impl<'a> MessageRead<'a> for ETHSignRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.coin = r.read_enum(bytes)?,
                 Ok(18) => msg.keypath = r.read_packed(bytes, |r, bytes| Ok(r.read_uint32(bytes)?))?,
-                Ok(26) => msg.nonce = r.read_bytes(bytes).map(Cow::Borrowed)?,
-                Ok(34) => msg.gas_price = r.read_bytes(bytes).map(Cow::Borrowed)?,
-                Ok(42) => msg.gas_limit = r.read_bytes(bytes).map(Cow::Borrowed)?,
-                Ok(50) => msg.recipient = r.read_bytes(bytes).map(Cow::Borrowed)?,
-                Ok(58) => msg.value = r.read_bytes(bytes).map(Cow::Borrowed)?,
-                Ok(66) => msg.data = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(26) => msg.nonce = r.read_bytes(bytes)?.to_owned(),
+                Ok(34) => msg.gas_price = r.read_bytes(bytes)?.to_owned(),
+                Ok(42) => msg.gas_limit = r.read_bytes(bytes)?.to_owned(),
+                Ok(50) => msg.recipient = r.read_bytes(bytes)?.to_owned(),
+                Ok(58) => msg.value = r.read_bytes(bytes)?.to_owned(),
+                Ok(66) => msg.data = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -168,47 +168,47 @@ impl<'a> MessageRead<'a> for ETHSignRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for ETHSignRequest<'a> {
+impl MessageWrite for ETHSignRequest {
     fn get_size(&self) -> usize {
         0
         + if self.coin == eth::ETHCoin::ETH { 0 } else { 1 + sizeof_varint(*(&self.coin) as u64) }
         + if self.keypath.is_empty() { 0 } else { 1 + sizeof_len(self.keypath.iter().map(|s| sizeof_varint(*(s) as u64)).sum::<usize>()) }
-        + if self.nonce == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.nonce).len()) }
-        + if self.gas_price == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.gas_price).len()) }
-        + if self.gas_limit == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.gas_limit).len()) }
-        + if self.recipient == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.recipient).len()) }
-        + if self.value == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.value).len()) }
-        + if self.data == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.data).len()) }
+        + if self.nonce == vec![] { 0 } else { 1 + sizeof_len((&self.nonce).len()) }
+        + if self.gas_price == vec![] { 0 } else { 1 + sizeof_len((&self.gas_price).len()) }
+        + if self.gas_limit == vec![] { 0 } else { 1 + sizeof_len((&self.gas_limit).len()) }
+        + if self.recipient == vec![] { 0 } else { 1 + sizeof_len((&self.recipient).len()) }
+        + if self.value == vec![] { 0 } else { 1 + sizeof_len((&self.value).len()) }
+        + if self.data == vec![] { 0 } else { 1 + sizeof_len((&self.data).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.coin != eth::ETHCoin::ETH { w.write_with_tag(8, |w| w.write_enum(*&self.coin as i32))?; }
         w.write_packed_with_tag(18, &self.keypath, |w, m| w.write_uint32(*m), &|m| sizeof_varint(*(m) as u64))?;
-        if self.nonce != Cow::Borrowed(b"") { w.write_with_tag(26, |w| w.write_bytes(&**&self.nonce))?; }
-        if self.gas_price != Cow::Borrowed(b"") { w.write_with_tag(34, |w| w.write_bytes(&**&self.gas_price))?; }
-        if self.gas_limit != Cow::Borrowed(b"") { w.write_with_tag(42, |w| w.write_bytes(&**&self.gas_limit))?; }
-        if self.recipient != Cow::Borrowed(b"") { w.write_with_tag(50, |w| w.write_bytes(&**&self.recipient))?; }
-        if self.value != Cow::Borrowed(b"") { w.write_with_tag(58, |w| w.write_bytes(&**&self.value))?; }
-        if self.data != Cow::Borrowed(b"") { w.write_with_tag(66, |w| w.write_bytes(&**&self.data))?; }
+        if self.nonce != vec![] { w.write_with_tag(26, |w| w.write_bytes(&**&self.nonce))?; }
+        if self.gas_price != vec![] { w.write_with_tag(34, |w| w.write_bytes(&**&self.gas_price))?; }
+        if self.gas_limit != vec![] { w.write_with_tag(42, |w| w.write_bytes(&**&self.gas_limit))?; }
+        if self.recipient != vec![] { w.write_with_tag(50, |w| w.write_bytes(&**&self.recipient))?; }
+        if self.value != vec![] { w.write_with_tag(58, |w| w.write_bytes(&**&self.value))?; }
+        if self.data != vec![] { w.write_with_tag(66, |w| w.write_bytes(&**&self.data))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct ETHSignMessageRequest<'a> {
+pub struct ETHSignMessageRequest {
     pub coin: ETHCoin,
     pub keypath: Vec<u32>,
-    pub msg: Cow<'a, [u8]>,
+    pub msg: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for ETHSignMessageRequest<'a> {
+impl<'a> MessageRead<'a> for ETHSignMessageRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.coin = r.read_enum(bytes)?,
                 Ok(18) => msg.keypath = r.read_packed(bytes, |r, bytes| Ok(r.read_uint32(bytes)?))?,
-                Ok(26) => msg.msg = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(26) => msg.msg = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -217,33 +217,33 @@ impl<'a> MessageRead<'a> for ETHSignMessageRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for ETHSignMessageRequest<'a> {
+impl MessageWrite for ETHSignMessageRequest {
     fn get_size(&self) -> usize {
         0
         + if self.coin == eth::ETHCoin::ETH { 0 } else { 1 + sizeof_varint(*(&self.coin) as u64) }
         + if self.keypath.is_empty() { 0 } else { 1 + sizeof_len(self.keypath.iter().map(|s| sizeof_varint(*(s) as u64)).sum::<usize>()) }
-        + if self.msg == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.msg).len()) }
+        + if self.msg == vec![] { 0 } else { 1 + sizeof_len((&self.msg).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.coin != eth::ETHCoin::ETH { w.write_with_tag(8, |w| w.write_enum(*&self.coin as i32))?; }
         w.write_packed_with_tag(18, &self.keypath, |w, m| w.write_uint32(*m), &|m| sizeof_varint(*(m) as u64))?;
-        if self.msg != Cow::Borrowed(b"") { w.write_with_tag(26, |w| w.write_bytes(&**&self.msg))?; }
+        if self.msg != vec![] { w.write_with_tag(26, |w| w.write_bytes(&**&self.msg))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct ETHSignResponse<'a> {
-    pub signature: Cow<'a, [u8]>,
+pub struct ETHSignResponse {
+    pub signature: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for ETHSignResponse<'a> {
+impl<'a> MessageRead<'a> for ETHSignResponse {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.signature = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.signature = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -252,24 +252,24 @@ impl<'a> MessageRead<'a> for ETHSignResponse<'a> {
     }
 }
 
-impl<'a> MessageWrite for ETHSignResponse<'a> {
+impl MessageWrite for ETHSignResponse {
     fn get_size(&self) -> usize {
         0
-        + if self.signature == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.signature).len()) }
+        + if self.signature == vec![] { 0 } else { 1 + sizeof_len((&self.signature).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.signature != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.signature))?; }
+        if self.signature != vec![] { w.write_with_tag(10, |w| w.write_bytes(&**&self.signature))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct ETHRequest<'a> {
-    pub request: mod_ETHRequest::OneOfrequest<'a>,
+pub struct ETHRequest {
+    pub request: mod_ETHRequest::OneOfrequest,
 }
 
-impl<'a> MessageRead<'a> for ETHRequest<'a> {
+impl<'a> MessageRead<'a> for ETHRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -285,7 +285,7 @@ impl<'a> MessageRead<'a> for ETHRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for ETHRequest<'a> {
+impl MessageWrite for ETHRequest {
     fn get_size(&self) -> usize {
         0
         + match self.request {
@@ -310,14 +310,14 @@ use alloc::vec::Vec;
 use super::*;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum OneOfrequest<'a> {
-    pub_pb(ETHPubRequest<'a>),
-    sign(ETHSignRequest<'a>),
-    sign_msg(ETHSignMessageRequest<'a>),
+pub enum OneOfrequest {
+    pub_pb(ETHPubRequest),
+    sign(ETHSignRequest),
+    sign_msg(ETHSignMessageRequest),
     None,
 }
 
-impl<'a> Default for OneOfrequest<'a> {
+impl Default for OneOfrequest {
     fn default() -> Self {
         OneOfrequest::None
     }
@@ -326,11 +326,11 @@ impl<'a> Default for OneOfrequest<'a> {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct ETHResponse<'a> {
-    pub response: mod_ETHResponse::OneOfresponse<'a>,
+pub struct ETHResponse {
+    pub response: mod_ETHResponse::OneOfresponse,
 }
 
-impl<'a> MessageRead<'a> for ETHResponse<'a> {
+impl<'a> MessageRead<'a> for ETHResponse {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -345,7 +345,7 @@ impl<'a> MessageRead<'a> for ETHResponse<'a> {
     }
 }
 
-impl<'a> MessageWrite for ETHResponse<'a> {
+impl MessageWrite for ETHResponse {
     fn get_size(&self) -> usize {
         0
         + match self.response {
@@ -368,17 +368,16 @@ use alloc::vec::Vec;
 use super::*;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum OneOfresponse<'a> {
-    pub_pb(common::PubResponse<'a>),
-    sign(ETHSignResponse<'a>),
+pub enum OneOfresponse {
+    pub_pb(common::PubResponse),
+    sign(ETHSignResponse),
     None,
 }
 
-impl<'a> Default for OneOfresponse<'a> {
+impl Default for OneOfresponse {
     fn default() -> Self {
         OneOfresponse::None
     }
 }
 
 }
-
