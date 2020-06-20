@@ -66,7 +66,11 @@ impl core::convert::From<()> for Error {
 /// Returns Err if anything goes wrong:
 /// - Invalid OP-code
 /// - Noise message in the wrong state (e.g. handshake before init, etc.).
-pub(crate) async fn process(usb_in: Vec<u8>, usb_out: &mut Vec<u8>) -> Result<(), Error> {
+pub(crate) async fn process(
+    usb_in: Vec<u8>,
+    usb_out: &mut Vec<u8>,
+    process_encrypted: fn(Vec<u8>) -> Vec<u8>,
+) -> Result<(), Error> {
     let mut state = NOISE_STATE.0.borrow_mut();
     match usb_in.split_first() {
         Some((&OP_I_CAN_HAS_HANDSHAEK, b"")) => {
@@ -117,21 +121,7 @@ pub(crate) async fn process(usb_in: Vec<u8>, usb_out: &mut Vec<u8>) -> Result<()
         }
         Some((&OP_NOISE_MSG, encrypted_msg)) => {
             let decrypted_msg = state.decrypt(encrypted_msg)?;
-
-            extern crate quick_protobuf;
-            use quick_protobuf::deserialize_from_slice;
-            use quick_protobuf::{BytesReader, MessageRead};
-            crate::print_debug!(1000, "yo!");
-            let mut reader = BytesReader::from_bytes(&decrypted_msg[..]);
-            let req =
-                crate::hww::pb::hww::Request::from_reader(&mut reader, &decrypted_msg[..]).unwrap();
-            match req.request {
-                crate::hww::pb::hww::mod_Request::OneOfrequest::random_number(_) => {
-                    crate::print_debug!(1000, "random!");
-                }
-                _ => (),
-            };
-            let response = bitbox02::commander::commander(decrypted_msg);
+            let response = process_encrypted(decrypted_msg);
             state.encrypt(&response, usb_out)?;
             Ok(())
         }
