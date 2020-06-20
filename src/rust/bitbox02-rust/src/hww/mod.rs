@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub mod noise;
+pub mod pb;
 
 extern crate alloc;
 use alloc::vec::Vec;

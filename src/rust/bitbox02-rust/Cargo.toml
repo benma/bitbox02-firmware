@@ -29,6 +29,7 @@ doctest = false
 bitbox02 = {path = "../bitbox02"}
 binascii = { version = "0.1.4", default-features = false, features = ["encode"] }
 bitbox02-noise = {path = "../bitbox02-noise"}
+quick-protobuf = { version = "0.7.0", default-features = false }
 
 # For stack allocated strings
 [dependencies.arrayvec]

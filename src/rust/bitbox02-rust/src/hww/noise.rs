@@ -117,6 +117,17 @@ pub(crate) async fn process(usb_in: Vec<u8>, usb_out: &mut Vec<u8>) -> Result<()
         }
         Some((&OP_NOISE_MSG, encrypted_msg)) => {
             let decrypted_msg = state.decrypt(encrypted_msg)?;
+
+            extern crate quick_protobuf;
+            use quick_protobuf::deserialize_from_slice;
+            use quick_protobuf::{BytesReader, MessageRead};
+            let req: crate::hww::pb::hww::Request = deserialize_from_slice(&decrypted_msg).unwrap();
+            match req.request {
+                crate::hww::pb::hww::mod_Request::OneOfrequest::random_number(_) => {
+                    crate::print_debug!(1000, "random!");
+                }
+                _ => (),
+            }
             let response = bitbox02::commander::commander(decrypted_msg);
             state.encrypt(&response, usb_out)?;
             Ok(())
