@@ -121,17 +121,45 @@ pub(crate) async fn process(usb_in: Vec<u8>, usb_out: &mut Vec<u8>) -> Result<()
             extern crate quick_protobuf;
             use quick_protobuf::deserialize_from_slice;
             use quick_protobuf::{BytesReader, MessageRead};
-            let req: crate::hww::pb::hww::Request = deserialize_from_slice(&decrypted_msg).unwrap();
+            crate::print_debug!(1000, "yo!");
+            let mut reader = BytesReader::from_bytes(&decrypted_msg[..]);
+            let req =
+                crate::hww::pb::hww::Request::from_reader(&mut reader, &decrypted_msg[..]).unwrap();
             match req.request {
                 crate::hww::pb::hww::mod_Request::OneOfrequest::random_number(_) => {
                     crate::print_debug!(1000, "random!");
                 }
                 _ => (),
-            }
+            };
             let response = bitbox02::commander::commander(decrypted_msg);
             state.encrypt(&response, usb_out)?;
             Ok(())
         }
         _ => Err(Error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::prelude::v1::*;
+    #[test]
+    pub fn test_full() {
+        extern crate quick_protobuf;
+        use quick_protobuf::deserialize_from_slice;
+        use quick_protobuf::{BytesReader, BytesWriter, MessageRead, MessageWrite, Writer};
+        // let req: quick_protobuf::errors::Result<crate::hww::pb::hww::Request> =
+        //     deserialize_from_slice(&[10, 0]);
+        let mut reader = BytesReader::from_bytes(&[10, 0]);
+        let req = crate::hww::pb::hww::Request::from_reader(&mut reader, &[10, 0]);
+        println!("lol: {:#?}", req);
+        // let mut req: crate::hww::pb::hww::Request = Default::default();
+        // req.request = crate::hww::pb::hww::mod_Request::OneOfrequest::device_info(
+        //     crate::hww::pb::bitbox02_system::DeviceInfoRequest {},
+        // );
+        // let mut outt = [0u8; 32];
+        // let mut writer = Writer::new(BytesWriter::new(&mut outt));
+        // req.write_message(&mut writer);
+        // println!("lol2: {:#?} {}", outt, req.get_size());
     }
 }

@@ -29,9 +29,6 @@ mod sha2;
 mod util;
 mod workflow;
 
-#[cfg(feature = "platform-bitboxbase")]
-pub mod bitboxbase;
-
 #[cfg(feature = "platform-bitbox02")]
 pub mod bitbox02;
 

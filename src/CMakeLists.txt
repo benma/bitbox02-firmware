@@ -399,7 +399,7 @@ if(NOT CMAKE_CROSSCOMPILING)
         # see src/rust/bitbox02-rust-c/src/lib.rs.
         # https://github.com/rust-lang/rust/issues/66740
         RUSTC_BOOTSTRAP=1
-        ${CARGO} test --all-features --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml --target-dir ${RUST_BINARY_DIR} ${RUST_CARGO_FLAG}
+        ${CARGO} test --all-features --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml --target-dir ${RUST_BINARY_DIR} ${RUST_CARGO_FLAG} -- --nocapture
     )
   add_dependencies(rust-test rust-bindgen)
 

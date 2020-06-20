@@ -17,6 +17,10 @@
 // When compiling for testing we allow certain warnings.
 #![cfg_attr(test, allow(unused_imports, dead_code))]
 
+#[cfg(test)]
+#[macro_use]
+extern crate std;
+
 mod error;
 #[macro_use]
 pub mod general;
