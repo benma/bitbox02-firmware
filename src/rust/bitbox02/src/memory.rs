@@ -10,7 +10,19 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License.
+// limitations under the License
+
+pub const DEVICE_NAME_MAX_SIZE: usize = 63;
+
+/// name.as_bytes() must be smaller or equal to `DEVICE_NAME_MAX_SIZE`.
+pub fn set_device_name(name: &str) -> Result<(), ()> {
+    if unsafe { bitbox02_sys::memory_set_device_name(crate::str_to_cstr_force!(name, 63).as_ptr()) }
+    {
+        Ok(())
+    } else {
+        Err(())
+    }
+}
 
 pub fn is_initialized() -> bool {
     unsafe { bitbox02_sys::memory_is_initialized() }

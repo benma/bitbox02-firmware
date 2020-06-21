@@ -14,7 +14,7 @@
 
 pub mod noise;
 pub mod pb;
-mod protobuf_api;
+pub mod protobuf_api;
 
 extern crate alloc;
 use alloc::vec::Vec;
@@ -80,7 +80,7 @@ pub async fn process_packet(usb_in: Vec<u8>) -> Vec<u8> {
     }
 
     let mut out = [OP_STATUS_SUCCESS].to_vec();
-    match noise::process(usb_in, &mut out, protobuf_api::process).await {
+    match noise::process(usb_in, &mut out).await {
         Ok(()) => out,
         Err(noise::Error) => [OP_STATUS_FAILURE].to_vec(),
     }

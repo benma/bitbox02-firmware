@@ -18,7 +18,39 @@ use alloc::vec::Vec;
 use crate::hww::pb::hww::mod_Request::OneOfrequest;
 use crate::hww::pb::hww::mod_Response::OneOfresponse;
 use crate::hww::pb::hww::{Request, Response};
-use crate::hww::pb::{hww::*, random_number::*};
+use crate::hww::pb::{bitbox02_system::*, hww, hww::*, random_number::*};
+
+enum Error {
+    InvalidInput,
+    Memory,
+    // Generic,
+    UserAbort,
+    // InvalidState,
+    // Disabled,
+    // Duplicate,
+}
+
+impl Error {
+    fn to_protobuf(self) -> OneOfresponse {
+        use alloc::string::ToString;
+
+        let error = match self {
+            Error::InvalidInput => hww::Error {
+                code: 101,
+                message: "invalid input".to_string(),
+            },
+            Error::Memory => hww::Error {
+                code: 102,
+                message: "memory".to_string(),
+            },
+            Error::UserAbort => hww::Error {
+                code: 104,
+                message: "aborted by the user".to_string(),
+            },
+        };
+        OneOfresponse::error(error)
+    }
+}
 
 fn protobuf_decode(input: &[u8]) -> Result<OneOfrequest, ()> {
     use quick_protobuf::{BytesReader, MessageRead};
@@ -47,25 +79,45 @@ fn protobuf_encode(response: OneOfresponse) -> Vec<u8> {
     buf[..rsp.get_size()].to_vec()
 }
 
-fn api(request: &OneOfrequest) -> Option<OneOfresponse> {
-    let response = match request {
-        OneOfrequest::random_number(_) => OneOfresponse::random_number(RandomNumberResponse {
-            number: b"................................".to_vec(),
-        }),
-        _ => return None,
+async fn api_set_device_name(request: &SetDeviceNameRequest) -> Result<OneOfresponse, Error> {
+    if request.name.as_bytes().len() > bitbox02::memory::DEVICE_NAME_MAX_SIZE {
+        return Err(Error::InvalidInput);
+    }
+
+    use crate::workflow::confirm;
+    let params = confirm::Params {
+        title: "Name",
+        body: &request.name,
+        scrollable: true,
+        ..Default::default()
     };
-    Some(response)
+    if !confirm::confirm(&params).await {
+        return Err(Error::UserAbort);
+    }
+    match bitbox02::memory::set_device_name(&request.name) {
+        Ok(()) => Ok(OneOfresponse::success(Success {})),
+        Err(()) => Err(Error::Memory),
+    }
 }
 
-pub fn process(input: Vec<u8>) -> Vec<u8> {
+async fn api(request: &OneOfrequest) -> Option<OneOfresponse> {
+    let response = match request {
+        OneOfrequest::device_name(r) => api_set_device_name(&r).await,
+        _ => return None,
+    };
+    match response {
+        Ok(r) => Some(r),
+        Err(err) => Some(err.to_protobuf()),
+    }
+}
+
+pub async fn process(input: Vec<u8>) -> Vec<u8> {
     let request = match protobuf_decode(&input[..]) {
         Ok(request) => request,
-        Err(_) => {
-            return protobuf_encode(OneOfresponse::success(Success {}));
-        }
+        Err(_) => return protobuf_encode((Error::InvalidInput).to_protobuf()),
     };
 
-    match api(&request) {
+    match api(&request).await {
         Some(r) => protobuf_encode(r),
         // Fall back to C commander for all api calls not handled in Rust.
         _ => bitbox02::commander::commander(input),
