@@ -21,6 +21,7 @@ use bitbox02_sys::keystore_error_t;
 pub use bitbox02_sys::xpub_type_t;
 
 pub const BIP39_WORDLIST_LEN: u16 = bitbox02_sys::BIP39_WORDLIST_LEN as u16;
+pub const EC_PUBLIC_KEY_UNCOMPRESSED_LEN: usize = bitbox02_sys::EC_PUBLIC_KEY_UNCOMPRESSED_LEN as _;
 
 pub fn is_locked() -> bool {
     unsafe { bitbox02_sys::keystore_is_locked() }
@@ -79,6 +80,22 @@ pub fn get_bip39_mnemonic() -> Result<zeroize::Zeroizing<String>, ()> {
                 .unwrap()
                 .into(),
         )),
+    }
+}
+
+pub fn secp256k1_pubkey_uncompressed(
+    keypath: &[u32],
+) -> Result<[u8; EC_PUBLIC_KEY_UNCOMPRESSED_LEN], ()> {
+    let mut pubkey = [0u8; EC_PUBLIC_KEY_UNCOMPRESSED_LEN];
+    match unsafe {
+        bitbox02_sys::keystore_secp256k1_pubkey_uncompressed(
+            keypath.as_ptr(),
+            keypath.len() as _,
+            pubkey.as_mut_ptr(),
+        )
+    } {
+        true => Ok(pubkey),
+        false => Err(()),
     }
 }
 
