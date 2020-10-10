@@ -17,6 +17,7 @@
 
 #include <apps/common/bip32.h>
 #include <hardfault.h>
+#include <keystore.h>
 #include <workflow/confirm.h>
 
 #include <stdio.h>
@@ -62,15 +63,15 @@ bool apps_btc_confirm_multisig(
         return true;
     }
 
-    BTCPubRequest_XPubType xpub_type;
+    xpub_type_t xpub_type;
     switch (coin) {
     case BTCCoin_BTC:
     case BTCCoin_LTC:
-        xpub_type = BTCPubRequest_XPubType_CAPITAL_ZPUB;
+        xpub_type = CAPITAL_ZPUB;
         break;
     case BTCCoin_TBTC:
     case BTCCoin_TLTC:
-        xpub_type = BTCPubRequest_XPubType_CAPITAL_VPUB;
+        xpub_type = CAPITAL_VPUB;
         break;
     default:
         Abort("confirm multisig: unknown coin");
@@ -84,7 +85,7 @@ bool apps_btc_confirm_multisig(
             return false;
         }
         char xpub_str[XPUB_ENCODED_LEN] = {0};
-        if (!btc_common_encode_xpub(&xpub, xpub_type, xpub_str, sizeof(xpub_str))) {
+        if (!keystore_encode_xpub(&xpub, xpub_type, xpub_str, sizeof(xpub_str))) {
             return false;
         }
         char confirm[XPUB_ENCODED_LEN + 100] = {0};

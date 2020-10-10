@@ -16,6 +16,8 @@
 #include <hardfault.h>
 #include <util.h>
 
+#include <wally_bip32.h>
+
 bool apps_common_bip32_xpub_from_protobuf(const XPub* xpub_in, struct ext_key* xpub_out)
 {
     // libwally quirk: bip32_key_init takes 20 bytes for the parent fingerprint but only uses
