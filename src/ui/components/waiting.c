@@ -16,17 +16,31 @@
 
 #include "image.h"
 #include "ui_images.h"
+#include "label.h"
 
 #include <hardfault.h>
+#include <memory/memory.h>
 #include <screen.h>
 #include <ui/ui_util.h>
 
 #include <string.h>
 
+typedef struct {
+    component_t* bb2_logo_component;
+    component_t* uninitialized_component;
+    component_t* lock_component;
+} data_t;
+
+
 static void _render(component_t* component)
 {
+    data_t* data = (data_t*)component->data;
     // TODO - add an interesting animation?
-    ui_util_component_render_subcomponents(component);
+    if (!memory_is_initialized()) {
+        data->uninitialized_component->f->render(data->uninitialized_component);
+    } else {
+        data->bb2_logo_component->f->render(data->bb2_logo_component);
+    }
 }
 
 /********************************** Component Functions **********************************/
@@ -51,19 +65,30 @@ component_t* waiting_create(void)
     if (!waiting) {
         Abort("Error: malloc waiting");
     }
+    data_t* data = malloc(sizeof(data_t));
+    if (!data) {
+        Abort("Error: malloc waiting data");
+    }
     memset(waiting, 0, sizeof(component_t));
+    memset(data, 0, sizeof(data_t));
+
+    waiting->data = data;
     waiting->f = &_component_functions;
     waiting->dimension.width = SCREEN_WIDTH;
     waiting->dimension.height = SCREEN_HEIGHT;
     waiting->position.top = 0;
     waiting->position.left = 0;
-    component_t* bb2_logo = image_create(
+
+    data->bb2_logo_component = image_create(
         IMAGE_BB2_LOGO,
         sizeof(IMAGE_BB2_LOGO),
         IMAGE_BB2_LOGO_W,
         IMAGE_BB2_LOGO_H,
         CENTER,
         waiting);
-    ui_util_add_sub_component(waiting, bb2_logo);
+    data->uninitialized_component = label_create("See the BitBoxApp", NULL, CENTER, waiting);
+
+    ui_util_add_sub_component(waiting, data->bb2_logo_component);
+    ui_util_add_sub_component(waiting, data->uninitialized_component);
     return waiting;
 }

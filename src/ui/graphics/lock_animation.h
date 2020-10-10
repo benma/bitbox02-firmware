@@ -9,7 +9,7 @@
 #define LOCK_ANIMATION_FRAME_SIZE \
     ((LOCK_ANIMATION_FRAME_WIDTH * LOCK_ANIMATION_FRAME_HEIGHT + 7) / 8)
 
-#include <stdint.h>
+
 
 /**
  * Start unlock animation via a timer that draws frames. To be calle before bip39 unlock.
