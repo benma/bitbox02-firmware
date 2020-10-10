@@ -27,6 +27,7 @@
 #include <sd.h>
 #include <securechip/securechip.h>
 #include <ui/components/confirm.h>
+#include <apps/eth/eth_params.h>
 #include <ui/components/label.h>
 #include <ui/components/menu.h>
 #include <ui/components/sdcard.h>

@@ -17,13 +17,25 @@ compile_error!(
     "Ethereum code is being compiled even though the app-ethereum feature is not enabled"
 );
 
+mod pubrequest;
+
 use super::pb;
 use super::Error;
 
 use pb::eth_request::Request;
+use pb::eth_response::Response as ETHResponse;
 use pb::response::Response;
 
+async fn process_api(request: &Request) -> Option<Result<ETHResponse, Error>> {
+    match request {
+        Request::Pub(ref request) => Some(pubrequest::process(request).await),
+        _ => None,
+    }
+}
+
 // a `None` result means that the call will fall back to C.
-pub async fn process(_request: &Request) -> Option<Result<Response, Error>> {
-    None
+pub async fn process(request: &Request) -> Option<Result<Response, Error>> {
+    process_api(request)
+        .await
+        .map(|r| r.map(|r| Response::Eth(pb::EthResponse { response: Some(r) })))
 }
