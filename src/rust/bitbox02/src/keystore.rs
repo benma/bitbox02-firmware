@@ -18,6 +18,8 @@ use alloc::string::String;
 use crate::password::Password;
 use bitbox02_sys::keystore_error_t;
 
+pub use bitbox02_sys::xpub_type_t;
+
 pub const BIP39_WORDLIST_LEN: u16 = bitbox02_sys::BIP39_WORDLIST_LEN as u16;
 
 pub fn is_locked() -> bool {
@@ -92,5 +94,23 @@ pub fn get_bip39_word(idx: u16) -> Result<&'static str, ()> {
             };
             Ok(core::str::from_utf8(&s[..]).unwrap())
         }
+    }
+}
+
+pub fn encode_xpub_at_keypath(keypath: &[u32], xpub_type: xpub_type_t) -> Result<String, ()> {
+    let mut xpub = [0u8; bitbox02_sys::XPUB_ENCODED_LEN as _];
+    match unsafe {
+        bitbox02_sys::keystore_encode_xpub_at_keypath(
+            keypath.as_ptr(),
+            keypath.len() as _,
+            xpub_type,
+            xpub.as_mut_ptr(),
+            xpub.len() as _,
+        )
+    } {
+        true => Ok(crate::util::str_from_null_terminated(&xpub[..])
+            .unwrap()
+            .into()),
+        false => Err(()),
     }
 }

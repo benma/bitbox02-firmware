@@ -14,6 +14,8 @@
 
 //! Stubs for testing.
 
+pub use bitbox02_sys::xpub_type_t;
+
 extern crate alloc;
 use alloc::string::String;
 
@@ -50,4 +52,9 @@ pub fn get_bip39_mnemonic() -> Result<zeroize::Zeroizing<String>, ()> {
 
 pub fn get_bip39_word(_idx: u16) -> Result<&'static str, ()> {
     panic!("not implemented")
+}
+
+pub fn encode_xpub_at_keypath(keypath: &[u32], xpub_type: xpub_type_t) -> Result<String, ()> {
+    let data = crate::testing::DATA.0.borrow();
+    data.keystore_encode_xpub_at_keypath.as_ref().unwrap()(keypath, xpub_type)
 }

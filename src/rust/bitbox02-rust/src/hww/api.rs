@@ -18,6 +18,7 @@ mod pb {
 
 mod backup;
 mod device_info;
+mod electrum;
 mod error;
 mod reset;
 mod sdcard;
@@ -98,6 +99,7 @@ async fn process_api(request: &Request) -> Option<Result<Response, Error>> {
         Request::CheckBackup(ref request) => Some(backup::check(request).await),
         Request::CreateBackup(ref request) => Some(backup::create(request).await),
         Request::ShowMnemonic(_) => Some(show_mnemonic::process().await),
+        Request::ElectrumEncryptionKey(ref request) => Some(electrum::process(request).await),
         _ => None,
     }
 }
