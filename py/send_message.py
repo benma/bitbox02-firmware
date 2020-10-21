@@ -462,7 +462,7 @@ class SendMessage:
                     "prev_out_index": inp["index"],
                     "prev_out_value": inp["value"],
                     "sequence": inp["spending_sequence"],
-                    "keypath": [84 + HARDENED, 1 + HARDENED, bip44_account, 0, 0],
+                    "keypath": [84 + HARDENED, 0 + HARDENED, bip44_account, 0, 0],
                     "script_config_index": 0,
                     "prev_tx": {
                         "version": prev_tx["transaction"]["version"],
@@ -477,21 +477,22 @@ class SendMessage:
             outputs.append(
                 bitbox02.BTCOutputExternal(
                     # TODO: parse pubkey script
-                    output_type=bitbox02.btc.P2WSH,
-                    output_hash=b"11111111111111111111111111111111",
+                    output_type=bitbox02.btc.P2SH,
+                    output_hash=binascii.unhexlify("d1b4084151424776344dae2d938debe02066855e"),
                     value=outp["value"],
                 )
             )
+            break
 
         print("Start signing...")
         self._device.btc_sign(
-            bitbox02.btc.TBTC,
+            bitbox02.btc.BTC,
             [
                 bitbox02.btc.BTCScriptConfigWithKeypath(
                     script_config=bitbox02.btc.BTCScriptConfig(
                         simple_type=bitbox02.btc.BTCScriptConfig.P2WPKH
                     ),
-                    keypath=[84 + HARDENED, 1 + HARDENED, bip44_account],
+                    keypath=[84 + HARDENED, 0 + HARDENED, bip44_account],
                 )
             ],
             inputs=inputs,
