@@ -457,6 +457,7 @@ Notes  :
 ============================================================================*/
 void qtouch_process(void)
 {
+    CRITICAL_SECTION_ENTER()
     touch_ret_t touch_ret;
 
     /* check the time_to_measure_touch flag for Touch Acquisition */
@@ -493,6 +494,7 @@ void qtouch_process(void)
             p_qtm_control->binding_layer_flags &= ~(1U << reburst_request);
         }
     }
+    CRITICAL_SECTION_LEAVE()
 }
 
 /*============================================================================
@@ -507,8 +509,10 @@ Notes  :
 void qtouch_timer_handler(void)
 {
     /* Count complete - Measure touch sensors */
+    CRITICAL_SECTION_ENTER()
     qtm_control.binding_layer_flags |= (1U << time_to_measure_touch);
     qtm_update_qtlib_timer(DEF_TOUCH_MEASUREMENT_PERIOD_MS);
+    CRITICAL_SECTION_LEAVE()
 }
 
 static void qtouch_timer_task_cb(const struct timer_task* const timer_task)
@@ -703,8 +707,10 @@ Notes    :  none
 ============================================================================*/
 void ADC0_1_Handler(void)
 {
+    CRITICAL_SECTION_ENTER()
     ADC0->INTFLAG.reg |= 1U;
     qtm_samd51_ptc_handler();
+    CRITICAL_SECTION_LEAVE()
 }
 
 #endif /* TOUCH_C */
