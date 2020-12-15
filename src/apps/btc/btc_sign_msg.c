@@ -114,7 +114,8 @@ USE_RESULT app_btc_result_t app_btc_sign_msg(
     rust_sha256(formatted_msg, offset, hash);
     rust_sha256(hash, sizeof(hash), hash);
     int recid;
-    if (!keystore_secp256k1_sign(keypath, keypath_len, hash, signature_out, &recid)) {
+    uint8_t host_nonce[32] = {0}; // TODO: get from host
+    if (!keystore_secp256k1_sign(keypath, keypath_len, hash, host_nonce, signature_out, &recid)) {
         return APP_BTC_ERR_UNKNOWN;
     }
     if (recid > 0xFF) {

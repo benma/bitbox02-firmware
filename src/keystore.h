@@ -18,6 +18,7 @@
 #include "compiler_util.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <secp256k1.h>
@@ -190,6 +191,7 @@ USE_RESULT bool keystore_secp256k1_pubkey(
  * @param[in] keypath derivation keypath
  * @param[in] keypath_len size of keypath buffer
  * @param[in] msg32 32 byte message to sign
+ * @param[in] host_nonce 32 byte nonce host contribution. Can be NULL.
  * @param[out] sig resulting signature in compact format. Must be 64 bytes.
  * @param[out] recid recoverable id. Can be NULL if not needed.
  * Parse with secp256k1_ecdsa_signature_serialize_compact().
@@ -199,6 +201,7 @@ USE_RESULT bool keystore_secp256k1_sign(
     const uint32_t* keypath,
     size_t keypath_len,
     const uint8_t* msg32,
+    const uint8_t* host_nonce32,
     uint8_t* sig_compact_out,
     int* recid_out);
 
