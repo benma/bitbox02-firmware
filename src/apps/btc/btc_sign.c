@@ -24,6 +24,7 @@
 
 #include <hardfault.h>
 #include <keystore.h>
+#include <keystore/keystore_antiklepto.h>
 #include <ui/components/empty.h>
 #include <ui/components/progress.h>
 #include <ui/screen_stack.h>
@@ -249,6 +250,8 @@ static void _reset(void)
 
     _maybe_pop_empty_screen();
     _maybe_pop_progress_screen();
+
+    keystore_antiklepto_clear();
 }
 
 static app_btc_result_t _error(app_btc_result_t err)
@@ -645,6 +648,23 @@ static app_btc_result_t _sign_input_pass2(
             _init_request.locktime,
             WALLY_SIGHASH_ALL,
             sighash);
+
+        if (request->has_host_nonce_commitment) {
+            next_out->has_anti_klepto_signer_commitment = true;
+            if (!keystore_antiklepto_secp256k1_commit(
+                    request->keypath,
+                    request->keypath_count,
+                    sighash,
+                    request->host_nonce_commitment.commitment,
+                    next_out->anti_klepto_signer_commitment.commitment)) {
+                return _error(APP_BTC_ERR_UNKNOWN);
+            }
+
+            next_out->type = BTCSignNextResponse_Type_HOST_NONCE;
+            return APP_BTC_OK;
+        }
+
+        // Return signature directly without the anti-klepto protocol, for backwards compatibility.
         uint8_t sig_out[64] = {0};
         uint8_t host_nonce[32] = {0}; // TODO: get from host
         if (!keystore_secp256k1_sign(
@@ -963,6 +983,30 @@ app_btc_result_t app_btc_sign_output(
         _index = 0;
         next_out->type = BTCSignNextResponse_Type_INPUT;
         next_out->index = _index;
+    }
+    return APP_BTC_OK;
+}
+
+app_btc_result_t app_btc_sign_antiklepto(
+    const AntiKleptoSignatureRequest* request,
+    BTCSignNextResponse* next_out)
+{
+    if (!keystore_antiklepto_secp256k1_sign(request->host_nonce, next_out->signature, NULL)) {
+        return APP_BTC_ERR_UNKNOWN;
+    }
+    next_out->has_signature = true;
+
+    if (_index < _init_request.num_inputs - 1) {
+        _index++;
+        // Want next input
+        next_out->type = BTCSignNextResponse_Type_INPUT;
+        next_out->index = _index;
+
+        _update_progress();
+    } else {
+        // Done with inputs pass2 -> done completely.
+        _reset();
+        next_out->type = BTCSignNextResponse_Type_DONE;
     }
     return APP_BTC_OK;
 }
