@@ -213,3 +213,17 @@ pub fn bip39_mnemonic_to_seed(mnemonic: &str) -> Result<zeroize::Zeroizing<Vec<u
         false => Err(()),
     }
 }
+
+pub fn encrypt_and_store_seed(seed: &[u8], password: &str) -> Result<(), ()> {
+    let password = zeroize::Zeroizing::new(crate::util::str_to_cstr_vec(password)?);
+    match unsafe {
+        bitbox02_sys::keystore_encrypt_and_store_seed(
+            seed.as_ptr(),
+            seed.len() as _,
+            password.as_ptr(),
+        )
+    } {
+        true => Ok(()),
+        false => Err(()),
+    }
+}

@@ -101,3 +101,7 @@ pub fn bip39_mnemonic_to_seed(mnemonic: &str) -> Result<zeroize::Zeroizing<Vec<u
     let data = crate::testing::DATA.0.borrow();
     data.keystore_bip39_mnemonic_to_seed.as_ref().unwrap()(mnemonic)
 }
+
+pub fn encrypt_and_store_seed(_seed: &[u8], _password: &str) -> Result<(), ()> {
+    unimplemented!();
+}
