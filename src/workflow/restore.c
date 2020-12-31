@@ -37,6 +37,13 @@ bool workflow_restore_backup(const RestoreBackupRequest* restore_request)
         return false;
     }
 
+#if APP_U2F == 1
+    if (!workflow_confirm_time(
+            restore_request->timestamp, restore_request->timezone_offset, false)) {
+        return false;
+    }
+#endif
+
     char password[INPUT_STRING_MAX_SIZE] = {0};
     UTIL_CLEANUP_STR(password);
     if (!password_set(password)) {
@@ -48,10 +55,6 @@ bool workflow_restore_backup(const RestoreBackupRequest* restore_request)
         return false;
     }
 #if APP_U2F == 1
-    if (!workflow_confirm_time(
-            restore_request->timestamp, restore_request->timezone_offset, false)) {
-        return false;
-    }
     if (!securechip_u2f_counter_set(restore_request->timestamp)) {
         // ignore error
     }
