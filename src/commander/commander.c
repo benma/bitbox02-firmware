@@ -27,6 +27,7 @@
 #include "rust/rust.h"
 #endif
 
+#include <backup/restore.h>
 #include <flags.h>
 #include <hardfault.h>
 #include <keystore.h>
@@ -37,7 +38,6 @@
 #include <version.h>
 
 #include <workflow/reboot.h>
-#include <workflow/restore.h>
 #include <workflow/workflow.h>
 
 #include "hww.pb.h"
@@ -93,15 +93,7 @@ static void _api_process_random(RandomNumberResponse* response)
 
 static commander_error_t _api_list_backups(ListBackupsResponse* response)
 {
-    if (!workflow_list_backups(response)) {
-        return COMMANDER_ERR_GENERIC;
-    }
-    return COMMANDER_OK;
-}
-
-static commander_error_t _api_restore_backup(const RestoreBackupRequest* request)
-{
-    if (!workflow_restore_backup(request)) {
+    if (restore_list_backups(response) != RESTORE_OK) {
         return COMMANDER_ERR_GENERIC;
     }
     return COMMANDER_OK;
@@ -162,9 +154,6 @@ static commander_error_t _api_process(const Request* request, Response* response
     case Request_list_backups_tag:
         response->which_response = Response_list_backups_tag;
         return _api_list_backups(&(response->response.list_backups));
-    case Request_restore_backup_tag:
-        response->which_response = Response_success_tag;
-        return _api_restore_backup(&(request->request.restore_backup));
 #if APP_ETH == 1
     case Request_eth_tag:
         response->which_response = Response_eth_tag;
