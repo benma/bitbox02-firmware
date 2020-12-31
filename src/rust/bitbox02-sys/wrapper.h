@@ -15,6 +15,7 @@
 #include <apps/btc/btc.h>
 #include <apps/eth/eth_params.h>
 #include <backup/backup.h>
+#include <backup/restore.h>
 #include <bitboxbase.pb.h>
 #include <bitboxbase/bitboxbase_screensaver.h>
 #include <bitboxbase/bitboxbase_watchdog.h>

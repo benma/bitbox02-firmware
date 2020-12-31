@@ -13,8 +13,11 @@
 // limitations under the License.
 
 extern crate alloc;
+use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::vec::Vec;
 pub use bitbox02_sys::backup_error_t as Error;
+pub use bitbox02_sys::restore_error_t as RestoreError;
 
 pub struct CheckData {
     pub id: String,
@@ -48,6 +51,42 @@ pub fn check() -> Result<CheckData, Error> {
                 .into(),
             birthdate,
         }),
+        err => Err(err),
+    }
+}
+
+pub struct Backup {
+    pub seed: zeroize::Zeroizing<Vec<u8>>,
+    pub name: String,
+    pub seed_birthdate: u32,
+}
+
+pub fn restore_from_directory(dir: &str) -> Result<Box<Backup>, RestoreError> {
+    let dir = crate::util::str_to_cstr_vec(dir).unwrap();
+    let mut backup = core::mem::MaybeUninit::uninit();
+    let mut backup_data = core::mem::MaybeUninit::uninit();
+    match unsafe {
+        bitbox02_sys::restore_from_directory(
+            dir.as_ptr(),
+            backup.as_mut_ptr(),
+            backup_data.as_mut_ptr(),
+        )
+    } {
+        RestoreError::RESTORE_OK => {
+            let backup = unsafe { backup.assume_init() };
+            let backup_data = unsafe { backup_data.assume_init() };
+            Ok(Box::new(Backup {
+                seed: zeroize::Zeroizing::new(
+                    backup_data.seed[..backup_data.seed_length as usize].to_vec(),
+                ),
+                name: crate::util::str_from_null_terminated(
+                    &backup.backup_v1.content.metadata.name,
+                )
+                .unwrap()
+                .into(),
+                seed_birthdate: backup_data.birthdate,
+            }))
+        }
         err => Err(err),
     }
 }

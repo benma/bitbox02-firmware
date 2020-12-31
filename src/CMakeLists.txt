@@ -332,6 +332,8 @@ add_custom_target(rust-bindgen
     --whitelist-function wally_free_string
     --whitelist-function backup_check
     --whitelist-function backup_create
+    --rustified-enum restore_error_t
+    --whitelist-function restore_from_directory
     --whitelist-function memory_is_initialized
     --whitelist-function memory_set_initialized
     --whitelist-function memory_is_mnemonic_passphrase_enabled

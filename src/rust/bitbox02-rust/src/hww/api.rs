@@ -118,6 +118,7 @@ async fn process_api(request: &Request) -> Option<Result<Response, Error>> {
         Request::CreateBackup(ref request) => Some(backup::create(request).await),
         Request::ShowMnemonic(_) => Some(show_mnemonic::process().await),
         Request::RestoreFromMnemonic(ref request) => Some(restore::from_mnemonic(request).await),
+        Request::RestoreBackup(ref request) => Some(restore::from_sdcard(request).await),
         Request::ElectrumEncryptionKey(ref request) => Some(electrum::process(request).await),
 
         #[cfg(feature = "app-ethereum")]

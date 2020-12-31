@@ -51,6 +51,7 @@ bool workflow_restore_backup(const RestoreBackupRequest* restore_request)
     }
 
     if (!keystore_encrypt_and_store_seed(backup_data.seed, backup_data.seed_length, password)) {
+        workflow_status_blocking("Could not\nrestore backup", false);
         return false;
     }
 

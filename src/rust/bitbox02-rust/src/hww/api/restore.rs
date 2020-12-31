@@ -85,3 +85,45 @@ pub async fn from_mnemonic(
     unlock::unlock_bip39().await;
     Ok(Response::Success(pb::Success {}))
 }
+
+pub async fn from_sdcard(request: &pb::RestoreBackupRequest) -> Result<Response, Error> {
+    #[cfg(feature = "app-u2f")]
+    {
+        let datetime_string =
+            bitbox02::format_datetime(request.timestamp, request.timezone_offset, false);
+        let params = confirm::Params {
+            title: "Is now?",
+            body: &datetime_string,
+            ..Default::default()
+        };
+        if !confirm::confirm(&params).await {
+            return Err(Error::Generic);
+        }
+    }
+
+    let backup = bitbox02::backup::restore_from_directory(&request.id).or(Err(Error::Generic))?;
+
+    let password = password::enter_twice().await?;
+
+    if bitbox02::keystore::encrypt_and_store_seed(&backup.seed, password.as_str()).is_err() {
+        status::status("Could not\nrestore backup", false).await;
+        return Err(Error::Generic);
+    };
+
+    #[cfg(feature = "app-u2f")]
+    {
+        // Ignore error
+        let _ = bitbox02::securechip::u2f_counter_set(request.timestamp);
+    }
+
+    // Ignore non-critical errors that could abort an otherwise successful restore.
+    let _ = bitbox02::memory::set_seed_birthdate(backup.seed_birthdate);
+    let _ = bitbox02::memory::set_device_name(&backup.name);
+
+    bitbox02::memory::set_initialized()?;
+
+    // This should never fail.
+    bitbox02::keystore::unlock(&password).expect("restore_backup: unlock failed");
+    unlock::unlock_bip39().await;
+    Ok(Response::Success(pb::Success {}))
+}
