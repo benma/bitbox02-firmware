@@ -25,7 +25,6 @@
 #include <workflow/password.h>
 #include <workflow/status.h>
 #include <workflow/unlock_bip39.h>
-#include <workflow/workflow.h>
 
 bool workflow_restore_backup(const RestoreBackupRequest* restore_request)
 {
