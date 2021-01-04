@@ -25,6 +25,7 @@ mod bitcoin;
 mod backup;
 mod device_info;
 mod electrum;
+mod randomnumber;
 mod reset;
 mod sdcard;
 mod set_device_name;
@@ -113,6 +114,7 @@ async fn process_api_btc(_request: &Request) -> Option<Result<Response, Error>> 
 /// the C commander.
 async fn process_api(request: &Request) -> Option<Result<Response, Error>> {
     match request {
+        Request::RandomNumber(_) => Some(randomnumber::process().await),
         Request::DeviceInfo(_) => Some(device_info::process()),
         Request::DeviceName(ref request) => Some(set_device_name::process(request).await),
         Request::SetPassword(ref request) => Some(set_password::process(request).await),

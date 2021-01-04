@@ -256,7 +256,9 @@ class SendMessage:
         self._device.remove_sdcard()
 
     def _display_random(self) -> None:
-        print(f"Random number: {self._device.random_number().hex()}")
+        random_number, show = self._device.random_number()
+        print(f"Random number: {random_number.hex()}")
+        show()
 
     def _get_root_fingerprint(self) -> None:
         print(f"Root fingerprint: {self._device.root_fingerprint().hex()}")

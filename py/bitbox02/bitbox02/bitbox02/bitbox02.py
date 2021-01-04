@@ -19,7 +19,7 @@ import os
 import sys
 import time
 from datetime import datetime
-from typing import Optional, List, Dict, Tuple, Any, Generator, Union, Sequence
+from typing import Optional, Callable, List, Dict, Tuple, Any, Generator, Union, Sequence
 from typing_extensions import TypedDict
 
 import semver
@@ -119,12 +119,14 @@ class BitBox02(BitBoxCommonAPI):
 
     # pylint: disable=too-many-public-methods
 
-    def random_number(self) -> bytes:
+    def random_number(self) -> Tuple[bytes, Callable[[], None]]:
         # pylint: disable=no-member
         request = hww.Request()
         request.random_number.CopyFrom(random_number.RandomNumberRequest())
         response = self._msg_query(request, expected_response="random_number")
-        return response.random_number.number
+        def show():
+            self._msg_query(request, expected_response="success")
+        return response.random_number.number, show
 
     def device_info(self) -> Dict[str, Any]:
         # pylint: disable=no-member
