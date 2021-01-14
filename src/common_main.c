@@ -113,4 +113,6 @@ void common_main(void)
             securechip_result);
         Abort(errmsg);
     }
+
+    _bootloader_autoenter();
 }

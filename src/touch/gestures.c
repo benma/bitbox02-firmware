@@ -144,6 +144,7 @@ static void _slider_state_update(gestures_detection_state_t* state, uint16_t pos
  */
 static void _slider_state_read_and_update(const uint8_t location)
 {
+
     if (qtouch_is_scroller_active(location)) {
         uint16_t current_pos = qtouch_get_scroller_position(location);
         if (location == bottom_slider) {

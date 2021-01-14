@@ -372,10 +372,28 @@ Notes  :
 ============================================================================*/
 static void qtm_post_process_complete(void)
 {
+    static int counter = 0;
+    if (counter == 30 && !measurement_done_touch) {
+        bool any_reference_is_zero = false;
+        for (uint16_t  i = 0; i < DEF_NUM_SENSORS; i++) {
+            if (qtouch_get_sensor_node_reference(i) == 0) {
+                any_reference_is_zero = true;
+                break;
+            }
+        }
+        if (any_reference_is_zero) {
+            measurement_done_touch = 1;
+        }
+    }
+    counter++;
+
     if ((0U != (qtlib_key_set1.qtm_touch_key_group_data->qtm_keys_status & 0x80U))) {
         p_qtm_control->binding_layer_flags |= (1U << reburst_request);
     } else {
         measurement_done_touch = 1;
+    }
+
+    if (measurement_done_touch) {
         qtouch_process_scroller_positions(); // Run the custom filter
 #if PLATFORM_BITBOXBASE == 1
         qtouch_process_buttons();
@@ -563,6 +581,10 @@ uint16_t qtouch_get_sensor_node_signal_filtered(uint16_t sensor_node)
     uint16_t X;
     uint16_t sensor_raw = qtouch_get_sensor_node_signal(sensor_node);
     uint16_t sensor_reference = qtouch_get_sensor_node_reference(sensor_node);
+
+    if (sensor_reference == 0) {
+        return 0;
+    }
     X = sensor_raw < sensor_reference ? 0 : sensor_raw - sensor_reference;
     // Add more weight to edge buttons because they are physically smaller (smaller readings).
     if ((sensor_node == DEF_SCROLLER_OFFSET_0) || (sensor_node == DEF_SCROLLER_OFFSET_1) ||
@@ -625,7 +647,6 @@ void qtouch_process_scroller_positions(void)
             weighted_sum += value * sensor_location[i];
             max_sensor_reading = (value > max_sensor_reading) ? value : max_sensor_reading;
         }
-
         // Compensate for deadband (i.e. when only a single edge button gives a reading and
         // neighbors do not)
         uint16_t scaled_value = weighted_sum / sum;
