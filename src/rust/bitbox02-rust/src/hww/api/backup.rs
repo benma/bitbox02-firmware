@@ -15,6 +15,9 @@
 use super::Error;
 use crate::pb;
 
+extern crate alloc;
+use alloc::vec::Vec;
+
 use pb::response::Response;
 
 use crate::workflow::{confirm, status, unlock};
@@ -138,6 +141,22 @@ pub async fn create(
     }
 }
 
+pub fn list() -> Result<Response, Error> {
+    let mut info: Vec<pb::BackupInfo> = Vec::new();
+    for dir in bitbox02::sd::list_subdir(None)? {
+        let data = match bitbox02::backup::restore_from_directory(&dir) {
+            Ok(data) => data,
+            Err(_) => continue,
+        };
+        info.push(pb::BackupInfo {
+            id: dir,
+            timestamp: data.timestamp,
+            name: data.name,
+        })
+    }
+    Ok(Response::ListBackups(pb::ListBackupsResponse { info }))
+}
+
 #[cfg(test)]
 mod tests {
     extern crate std;
@@ -178,5 +197,55 @@ mod tests {
             Ok(Response::Success(pb::Success {}))
         );
         assert_eq!(EXPECTED_TIMESTMAP, bitbox02::memory::get_seed_birthdate());
+    }
+
+    #[test]
+    pub fn test_list() {
+        let _guard = MUTEX.lock().unwrap();
+        const EXPECTED_TIMESTMAP: u32 = 1601281809;
+
+        mock_sd();
+
+        // No backups yet.
+        assert_eq!(
+            list(),
+            Ok(Response::ListBackups(pb::ListBackupsResponse {
+                info: vec![]
+            }))
+        );
+
+        // Create one backup.
+        mock(Data {
+            sdcard_inserted: Some(true),
+            memory_is_initialized: Some(false),
+            memory_set_initialized_result: Some(Ok(())),
+            ui_confirm_create: Some(Box::new(|params| {
+                assert_eq!(params.body, "<date>");
+                true
+            })),
+            memory_set_seed_birthdate: Some(Box::new(|timestamp| {
+                assert_eq!(timestamp, EXPECTED_TIMESTMAP);
+                Ok(())
+            })),
+            ..Default::default()
+        });
+        mock_unlocked();
+        assert!(block_on(create(&pb::CreateBackupRequest {
+            timestamp: EXPECTED_TIMESTMAP,
+            timezone_offset: 18000,
+        }))
+        .is_ok());
+
+        // TODO: make and test multiple backups (mock_unlocked() needs to take a seed argument), and give the backup some names (memory.c needs simple to use mocking, e.g. use RAM instead of mcu flash).
+        assert_eq!(
+            list(),
+            Ok(Response::ListBackups(pb::ListBackupsResponse {
+                info: vec![pb::BackupInfo {
+                    id: "41233dfbad010723dbbb93514b7b81016b73f8aa35c5148e1b478f60d5750dce".into(),
+                    timestamp: EXPECTED_TIMESTMAP,
+                    name: "".into(),
+                }]
+            }))
+        )
     }
 }

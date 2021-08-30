@@ -36,11 +36,6 @@ restore_error_t restore_from_buffer(
     BackupData* backup_data);
 
 /**
- * Returns a list of backup information to the caller.
- */
-restore_error_t restore_list_backups(ListBackupsResponse* backups);
-
-/**
  * Attempts to restore the seed from the given backup data.
  * @param[in] backup_data The backup data which contains the seed and seed length.
  * @param[in] password The password with which the seed will be encrypted.

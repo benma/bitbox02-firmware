@@ -53,14 +53,6 @@ static void _report_error(Response* response, commander_error_t error_code)
 
 // ------------------------------------ API ------------------------------------- //
 
-static commander_error_t _api_list_backups(ListBackupsResponse* response)
-{
-    if (!workflow_list_backups(response)) {
-        return COMMANDER_ERR_GENERIC;
-    }
-    return COMMANDER_OK;
-}
-
 static commander_error_t _api_restore_backup(const RestoreBackupRequest* request)
 {
     if (!workflow_restore_backup(request)) {
@@ -95,9 +87,6 @@ static commander_error_t _api_process(const Request* request, Response* response
     case Request_btc_sign_output_tag:
         return COMMANDER_ERR_DISABLED;
 #endif
-    case Request_list_backups_tag:
-        response->which_response = Response_list_backups_tag;
-        return _api_list_backups(&(response->response.list_backups));
     case Request_restore_backup_tag:
         response->which_response = Response_success_tag;
         return _api_restore_backup(&(request->request.restore_backup));

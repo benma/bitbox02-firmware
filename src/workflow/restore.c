@@ -70,12 +70,3 @@ bool workflow_restore_backup(const RestoreBackupRequest* restore_request)
     workflow_unlock_bip39_blocking();
     return true;
 }
-
-bool workflow_list_backups(ListBackupsResponse* backups)
-{
-    restore_error_t res = restore_list_backups(backups);
-    if (res != RESTORE_OK) {
-        return false;
-    }
-    return true;
-}

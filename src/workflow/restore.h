@@ -24,10 +24,4 @@
  */
 bool workflow_restore_backup(const RestoreBackupRequest* restore_request);
 
-/**
- * Starts the list backups workflow.
- * @return true if listing teh backups was successful.
- */
-bool workflow_list_backups(ListBackupsResponse* backups);
-
 #endif
