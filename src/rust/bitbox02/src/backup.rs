@@ -15,6 +15,7 @@
 extern crate alloc;
 use alloc::string::String;
 pub use bitbox02_sys::backup_error_t as Error;
+pub use bitbox02_sys::restore_error_t as RestoreError;
 
 pub struct CheckData {
     pub id: String,
@@ -47,6 +48,46 @@ pub fn check() -> Result<CheckData, Error> {
                 .unwrap()
                 .into(),
             birthdate,
+        }),
+        err => Err(err),
+    }
+}
+
+#[derive(Copy, Clone, Default)]
+struct Backup(bitbox02_sys::Backup);
+
+#[derive(Copy, Clone, Default)]
+struct BackupData(bitbox02_sys::BackupData);
+
+impl zeroize::DefaultIsZeroes for Backup {}
+impl zeroize::DefaultIsZeroes for BackupData {}
+
+pub struct RestoreData {
+    // unix timestamp, UTC.
+    pub timestamp: u32,
+    pub name: String,
+}
+
+pub fn restore_from_directory(dir: &str) -> Result<RestoreData, RestoreError> {
+    let mut backup = zeroize::Zeroizing::new(Backup {
+        ..Default::default()
+    });
+    let mut backup_data = zeroize::Zeroizing::new(BackupData {
+        ..Default::default()
+    });
+
+    match unsafe {
+        bitbox02_sys::restore_from_directory(
+            crate::util::str_to_cstr_vec(dir).unwrap().as_ptr(),
+            &mut backup.0,
+            &mut backup_data.0,
+        )
+    } {
+        RestoreError::RESTORE_OK => Ok(RestoreData {
+            timestamp: backup.0.backup_v1.content.metadata.timestamp,
+            name: crate::util::str_from_null_terminated(&backup.0.backup_v1.content.metadata.name)
+                .or(Err(RestoreError::RESTORE_ERR_DECODE))?
+                .into(),
         }),
         err => Err(err),
     }
