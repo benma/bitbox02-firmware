@@ -16,6 +16,7 @@ use crate::bb02_async::option;
 
 pub use bitbox02::ui::{ConfirmParams as Params, Font};
 
+#[derive(Debug)]
 pub struct UserAbort;
 
 /// Returns true if the user accepts, false if the user rejects.

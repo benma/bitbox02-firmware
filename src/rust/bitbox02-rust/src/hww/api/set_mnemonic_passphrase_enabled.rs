@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::Error;
+use super::error::{Context, Error, ErrorKind};
 use crate::pb;
 
 use pb::response::Response;
@@ -31,9 +31,7 @@ pub async fn process(
 
     confirm::confirm(&params).await?;
 
-    if bitbox02::memory::set_mnemonic_passphrase_enabled(enabled).is_err() {
-        return Err(Error::Memory);
-    }
+    bitbox02::memory::set_mnemonic_passphrase_enabled(enabled).error_kind(ErrorKind::Memory)?;
 
     Ok(Response::Success(pb::Success {}))
 }
@@ -81,8 +79,10 @@ mod tests {
         assert_eq!(
             block_on(process(&pb::SetMnemonicPassphraseEnabledRequest {
                 enabled: true
-            })),
-            Err(Error::UserAbort)
+            }))
+            .unwrap_err()
+            .kind,
+            ErrorKind::UserAbort
         );
     }
 }
