@@ -144,7 +144,7 @@ mod tests {
     use super::*;
 
     use crate::bb02_async::block_on;
-    use bitbox02::testing::{mock, Data, MUTEX};
+    use bitbox02::testing::{mock, mock_memory, Data, MUTEX};
     use std::boxed::Box;
 
     /// Test backup creation on a uninitialized keystore.
@@ -156,15 +156,9 @@ mod tests {
         // All good.
         mock(Data {
             sdcard_inserted: Some(true),
-            memory_is_initialized: Some(false),
-            memory_set_initialized_result: Some(Ok(())),
             ui_confirm_create: Some(Box::new(|params| {
                 assert_eq!(params.body, "<date>");
                 true
-            })),
-            memory_set_seed_birthdate: Some(Box::new(|timestamp| {
-                assert_eq!(timestamp, EXPECTED_TIMESTMAP);
-                Ok(())
             })),
             backup_create: Some(Box::new(
                 |backup_create_timestamp, seed_birthdate_timestamp| {
@@ -175,6 +169,7 @@ mod tests {
             )),
             ..Default::default()
         });
+        mock_memory();
         assert_eq!(
             block_on(create(&pb::CreateBackupRequest {
                 timestamp: EXPECTED_TIMESTMAP,
@@ -182,5 +177,6 @@ mod tests {
             })),
             Ok(Response::Success(pb::Success {}))
         );
+        // TODO check seed birthdate
     }
 }
