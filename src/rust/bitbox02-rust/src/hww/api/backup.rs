@@ -204,6 +204,8 @@ mod tests {
         let _guard = MUTEX.lock().unwrap();
         const EXPECTED_TIMESTMAP: u32 = 1601281809;
 
+        const DEVICE_NAME: &str = "test device name";
+
         mock_sd();
 
         // No backups yet.
@@ -230,6 +232,8 @@ mod tests {
             ..Default::default()
         });
         mock_unlocked();
+        mock_memory();
+        bitbox02::memory::set_device_name(DEVICE_NAME);
         assert!(block_on(create(&pb::CreateBackupRequest {
             timestamp: EXPECTED_TIMESTMAP,
             timezone_offset: 18000,
