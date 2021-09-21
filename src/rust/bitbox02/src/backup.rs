@@ -14,6 +14,7 @@
 
 extern crate alloc;
 use alloc::string::String;
+use alloc::vec::Vec;
 pub use bitbox02_sys::backup_error_t as Error;
 pub use bitbox02_sys::restore_error_t as RestoreError;
 
@@ -64,6 +65,8 @@ impl zeroize::DefaultIsZeroes for BackupData {}
 
 pub struct RestoreData {
     // unix timestamp, UTC.
+    pub seed: zeroize::Zeroizing<Vec<u8>>,
+    pub birthdate: u32,
     pub timestamp: u32,
     pub name: String,
 }
@@ -84,6 +87,10 @@ pub fn restore_from_directory(dir: &str) -> Result<RestoreData, RestoreError> {
         )
     } {
         RestoreError::RESTORE_OK => Ok(RestoreData {
+            seed: zeroize::Zeroizing::new(
+                backup_data.0.seed[..backup_data.0.seed_length as _].to_vec(),
+            ),
+            birthdate: backup_data.0.birthdate,
             timestamp: backup.0.backup_v1.content.metadata.timestamp,
             name: crate::util::str_from_null_terminated(&backup.0.backup_v1.content.metadata.name)
                 .or(Err(RestoreError::RESTORE_ERR_DECODE))?
