@@ -201,20 +201,14 @@ class BitBox02(BitBoxCommonAPI):
 
     def restore_backup(self, backup_id: str) -> bool:
         """
-        Sends a restore API call to the BitBox.
+        Sends a restore API call to the BitBox. Raises a Bitbox02Exception on failure.
         """
         # pylint: disable=no-member
         request = hww.Request()
         request.restore_backup.id = backup_id
         request.restore_backup.timestamp = int(time.time())
         request.restore_backup.timezone_offset = time.localtime().tm_gmtoff
-        try:
-            self._msg_query(request, expected_response="success")
-        except Bitbox02Exception as err:
-            if err.code == ERR_GENERIC:
-                return False
-            raise
-        return True
+        self._msg_query(request, expected_response="success")
 
     def check_backup(self, silent: bool = False) -> Optional[str]:
         """
