@@ -16,7 +16,9 @@
 #include "button.h"
 #include "image.h"
 #include "ui_images.h"
+#include <qtouch/qtouch.h>
 
+#include "label.h"
 #include <hardfault.h>
 #include <screen.h>
 #include <util.h>
@@ -42,96 +44,130 @@ typedef struct {
     uint16_t screen_count;
     void (*done_callback)(bool, void*);
     void* cb_param;
+    component_t* label_top;
+    component_t* label_bottom;
 } orientation_data_t;
 
-/**
- * Calls the done callback with the flip flag enabled.
- */
-static void _flip(component_t* component)
-{
-    orientation_data_t* data = (orientation_data_t*)component->parent->data;
-    if (data->enable_touch) {
-        data->done_callback(true, data->cb_param);
-    }
-}
+/* /\** */
+/*  * Calls the done callback with the flip flag enabled. */
+/*  *\/ */
+/* static void _flip(component_t* component) */
+/* { */
+/*     orientation_data_t* data = (orientation_data_t*)component->parent->data; */
+/*     if (data->enable_touch) { */
+/*         data->done_callback(true, data->cb_param); */
+/*     } */
+/* } */
 
-/**
- * Calls the done callback with the flip flag disabled.
- */
-static void _stay(component_t* component)
-{
-    orientation_data_t* data = (orientation_data_t*)component->parent->data;
-    if (data->enable_touch) {
-        data->done_callback(false, data->cb_param);
-    }
-}
+/* /\** */
+/*  * Calls the done callback with the flip flag disabled. */
+/*  *\/ */
+/* static void _stay(component_t* component) */
+/* { */
+/*     orientation_data_t* data = (orientation_data_t*)component->parent->data; */
+/*     if (data->enable_touch) { */
+/*         data->done_callback(false, data->cb_param); */
+/*     } */
+/* } */
 
 static void _render(component_t* component)
 {
     orientation_data_t* data = (orientation_data_t*)component->data;
-    int16_t x;
-    int16_t y;
-    int16_t height = IMAGE_DEFAULT_ARROW_HEIGHT;
-    int16_t position = data->screen_count / SCALE;
-    if (position < COUNT_CHANGE_DIRECTION) {
-        // Horizontal motion
-        x = position;
-        y = SCREEN_HEIGHT / 2 - height;
-        image_arrow(x - height + 2, y, height, ARROW_RIGHT);
-        image_arrow(SCREEN_WIDTH - x - 2, y, height, ARROW_LEFT);
-    } else if (position < COUNT_SHOW_TEXT) {
-        // Vertical motion
-        x = SCREEN_WIDTH / 2 - height;
-        y = position - COUNT_CHANGE_DIRECTION + SCREEN_HEIGHT / 2;
-        image_arrow(x, y, height, ARROW_DOWN);
-        image_arrow(x, SCREEN_HEIGHT - y - height, height, ARROW_UP);
-    } else if (position < COUNT_SHOW_TEXT + SCALE * 12) {
-        // Zoom in to rotate arrow
-        uint8_t r;
-        r =
-            MIN(IMAGE_ROTATE_H / 2,
-                MAX(0, (position - COUNT_SHOW_TEXT - (12 - IMAGE_ROTATE_H / 2)) / SCALE));
-        UG_DrawCircle(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, r, screen_front_color);
-        // Raise text
-        y = (position - COUNT_SHOW_TEXT) / SCALE; // Slower movement
-        for (int i = 0; i < 2; i++) {
-            component_t* sc = component->sub_components.sub_components[i];
-            sc->position.top =
-                i ? MIN(0, y - 12) : SCREEN_HEIGHT - sc->dimension.height - MIN(0, y - 12);
-            sc->f->render(sc);
-        }
-    } else {
-        // Render sub-components
-        uint8_t bounce = 5;
-        int16_t period = 512;
-        for (int i = 0; i < 2; i++) {
-            // Calculate bounce position
-            y = ((data->screen_count - period / 4) % period) - (i ? 0 : period / 2);
-            if (y > bounce * SCALE * 4 || y < 0) {
-                // No bounce
-                y = 0;
-            } else if (y > bounce * SCALE * 2) {
-                y = bounce * SCALE * 4 - y;
-            } else if (y > 0) {
-                // y = y;
-            }
-            y = y / SCALE / 4;
-            // Bounce text
-            component_t* sc = component->sub_components.sub_components[i];
-            sc->position.top = i ? y : SCREEN_HEIGHT - sc->dimension.height - y;
-            sc->f->render(sc);
-        }
-        if ((data->screen_count - period / 4) % period < period / 2) {
-            component_t* sc_rotate = component->sub_components.sub_components[2];
-            sc_rotate->f->render(sc_rotate);
-        } else {
-            component_t* sc_rotate_reverse = component->sub_components.sub_components[3];
-            sc_rotate_reverse->f->render(sc_rotate_reverse);
-        }
-        data->enable_touch = true;
-    }
+    /* int16_t x; */
+    /* int16_t y; */
+    /* int16_t height = IMAGE_DEFAULT_ARROW_HEIGHT; */
+    /* int16_t position = data->screen_count / SCALE; */
+    /* if (position < COUNT_CHANGE_DIRECTION) { */
+    /*     // Horizontal motion */
+    /*     x = position; */
+    /*     y = SCREEN_HEIGHT / 2 - height; */
+    /*     image_arrow(x - height + 2, y, height, ARROW_RIGHT); */
+    /*     image_arrow(SCREEN_WIDTH - x - 2, y, height, ARROW_LEFT); */
+    /* } else if (position < COUNT_SHOW_TEXT) { */
+    /*     // Vertical motion */
+    /*     x = SCREEN_WIDTH / 2 - height; */
+    /*     y = position - COUNT_CHANGE_DIRECTION + SCREEN_HEIGHT / 2; */
+    /*     image_arrow(x, y, height, ARROW_DOWN); */
+    /*     image_arrow(x, SCREEN_HEIGHT - y - height, height, ARROW_UP); */
+    /* } else if (position < COUNT_SHOW_TEXT + SCALE * 12) { */
+    /*     // Zoom in to rotate arrow */
+    /*     uint8_t r; */
+    /*     r = */
+    /*         MIN(IMAGE_ROTATE_H / 2, */
+    /*             MAX(0, (position - COUNT_SHOW_TEXT - (12 - IMAGE_ROTATE_H / 2)) / SCALE)); */
+    /*     UG_DrawCircle(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, r, screen_front_color); */
+    /*     // Raise text */
+    /*     y = (position - COUNT_SHOW_TEXT) / SCALE; // Slower movement */
+    /*     for (int i = 0; i < 2; i++) { */
+    /*         component_t* sc = component->sub_components.sub_components[i]; */
+    /*         sc->position.top = */
+    /*             i ? MIN(0, y - 12) : SCREEN_HEIGHT - sc->dimension.height - MIN(0, y - 12); */
+    /*         sc->f->render(sc); */
+    /*     } */
+    /* } else { */
+    /*     // Render sub-components */
+    /*     uint8_t bounce = 5; */
+    /*     int16_t period = 512; */
+    /*     for (int i = 0; i < 2; i++) { */
+    /*         // Calculate bounce position */
+    /*         y = ((data->screen_count - period / 4) % period) - (i ? 0 : period / 2); */
+    /*         if (y > bounce * SCALE * 4 || y < 0) { */
+    /*             // No bounce */
+    /*             y = 0; */
+    /*         } else if (y > bounce * SCALE * 2) { */
+    /*             y = bounce * SCALE * 4 - y; */
+    /*         } else if (y > 0) { */
+    /*             // y = y; */
+    /*         } */
+    /*         y = y / SCALE / 4; */
+    /*         // Bounce text */
+    /*         component_t* sc = component->sub_components.sub_components[i]; */
+    /*         sc->position.top = i ? y : SCREEN_HEIGHT - sc->dimension.height - y; */
+    /*         sc->f->render(sc); */
+    /*     } */
+    /*     if ((data->screen_count - period / 4) % period < period / 2) { */
+    /*         component_t* sc_rotate = component->sub_components.sub_components[2]; */
+    /*         sc_rotate->f->render(sc_rotate); */
+    /*     } else { */
+    /*         component_t* sc_rotate_reverse = component->sub_components.sub_components[3]; */
+    /*         sc_rotate_reverse->f->render(sc_rotate_reverse); */
+    /*     } */
+    /*     data->enable_touch = true; */
+    /* } */
+
+    data->enable_touch = true;
     qtouch_force_calibrate();
     data->screen_count++;
+
+    char text[500];
+    snprintf(
+        text,
+        sizeof(text),
+        "%d/%d %d/%d %d/%d %d/%d",
+        qtouch_get_sensor_node_signal(0),
+        qtouch_get_sensor_node_reference(0),
+        qtouch_get_sensor_node_signal(1),
+        qtouch_get_sensor_node_reference(1),
+        qtouch_get_sensor_node_signal(2),
+        qtouch_get_sensor_node_reference(2),
+        qtouch_get_sensor_node_signal(3),
+        qtouch_get_sensor_node_reference(3));
+    label_update(data->label_top, text);
+    snprintf(
+        text,
+        sizeof(text),
+        "%d/%d %d/%d %d/%d %d/%d",
+        qtouch_get_sensor_node_signal(7),
+        qtouch_get_sensor_node_reference(7),
+        qtouch_get_sensor_node_signal(6),
+        qtouch_get_sensor_node_reference(6),
+        qtouch_get_sensor_node_signal(5),
+        qtouch_get_sensor_node_reference(5),
+        qtouch_get_sensor_node_signal(4),
+        qtouch_get_sensor_node_reference(4));
+    label_update(data->label_bottom, text);
+    data->label_top->f->render(data->label_top);
+    data->label_bottom->f->render(data->label_bottom);
 }
 
 /********************************** Component Functions **********************************/
@@ -172,24 +208,28 @@ component_t* orientation_arrows_create(void (*done_callback)(bool, void*), void*
     orientation->position.top = 0;
     orientation->position.left = 0;
 
-    component_t* button_normal = button_create_wide(TEXT, bottom_slider, _stay, orientation);
-    component_t* button_upside_down =
-        button_create_wide_upside_down(TEXT, top_slider, _flip, orientation);
-    component_t* rotate = image_create(
-        IMAGE_ROTATE, sizeof(IMAGE_ROTATE), IMAGE_ROTATE_W, IMAGE_ROTATE_H, CENTER, orientation);
-    component_t* rotate_reverse = image_create(
-        IMAGE_ROTATE_REVERSE,
-        sizeof(IMAGE_ROTATE),
-        IMAGE_ROTATE_W,
-        IMAGE_ROTATE_H,
-        CENTER,
-        orientation);
+    /* component_t* button_normal = button_create_wide(TEXT, bottom_slider, _stay, orientation); */
+    /* component_t* button_upside_down = */
+    /*     button_create_wide_upside_down(TEXT, top_slider, _flip, orientation); */
+    /* component_t* rotate = image_create( */
+    /*     IMAGE_ROTATE, sizeof(IMAGE_ROTATE), IMAGE_ROTATE_W, IMAGE_ROTATE_H, CENTER, orientation); */
+    /* component_t* rotate_reverse = image_create( */
+    /*     IMAGE_ROTATE_REVERSE, */
+    /*     sizeof(IMAGE_ROTATE), */
+    /*     IMAGE_ROTATE_W, */
+    /*     IMAGE_ROTATE_H, */
+    /*     CENTER, */
+    /*     orientation); */
 
-    // Order/presence is important and affects rendering `sc->f->render(sc)`;
-    ui_util_add_sub_component(orientation, button_normal);
-    ui_util_add_sub_component(orientation, button_upside_down);
-    ui_util_add_sub_component(orientation, rotate);
-    ui_util_add_sub_component(orientation, rotate_reverse);
+    /* // Order/presence is important and affects rendering `sc->f->render(sc)`; */
+    /* ui_util_add_sub_component(orientation, button_normal); */
+    /* ui_util_add_sub_component(orientation, button_upside_down); */
+    /* ui_util_add_sub_component(orientation, rotate); */
+    /* ui_util_add_sub_component(orientation, rotate_reverse); */
 
+    data->label_top = label_create("label", NULL, LEFT_TOP, orientation);
+    ui_util_add_sub_component(orientation, data->label_top);
+    data->label_bottom = label_create("label", NULL, LEFT_BOTTOM, orientation);
+    ui_util_add_sub_component(orientation, data->label_bottom);
     return orientation;
 }
