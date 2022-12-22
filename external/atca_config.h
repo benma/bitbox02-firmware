@@ -22,6 +22,12 @@
 // Shift: we currently use a custom HAL config, see `ATCAIfaceCfg cfg` in securechip.c.
 #define ATCA_HAL_CUSTOM
 
+// Shift: cryptoauthlib uses `hal_malloc` and `hal_free` (for which we have no definitions) unless
+// reconfigured like this.
+#define ATCA_PLATFORM_MALLOC
+#define ATCA_PLATFORM_MALLOC malloc
+#define ATCA_PLATFORM_FREE free
+
 /* Included device support */
 #define ATCA_ATECC608_SUPPORT
 

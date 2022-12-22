@@ -16,7 +16,7 @@
 #include "hardfault.h"
 #include <i2c_ecc.h>
 #include <util.h>
-
+#include <screen.h>
 // disabling some warnings, as it's an external library.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wint-conversion"
@@ -130,7 +130,9 @@ static ATCA_STATUS _receive(void* iface, uint8_t word_address, uint8_t* rxdata, 
  */
 static ATCA_STATUS _send(void* iface, uint8_t word_address, uint8_t* txdata, int txlength)
 {
-    (void)iface;
+    ATCAIface ifacee = (ATCAIface)iface;
+    ATCAIfaceCfg *cfg = atgetifacecfg(ifacee);
+    screen_sprintf_debug(5000, "_send: %d\n%d", cfg->rx_retries, word_address);
     (void)word_address;
     // txdata[0] is using _reserved byte of the ATCAPacket
     txdata[0] = I2C_ECC_CHIP_CMD;
@@ -374,6 +376,7 @@ int securechip_setup(const securechip_interface_functions_t* ifs)
     _interface_functions = ifs;
     ATCA_STATUS result = atcab_init(&cfg);
     if (result != ATCA_SUCCESS) {
+        screen_print_debug("atcab_init failed",1000);
         return result;
     }
 

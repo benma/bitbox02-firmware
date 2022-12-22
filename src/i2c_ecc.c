@@ -16,6 +16,8 @@
 
 #include "i2c_ecc.h"
 #include "driver_init.h"
+#include <screen.h>
+
 #include "util.h"
 #include <string.h>
 
@@ -55,6 +57,7 @@ uint8_t i2c_ecc_write(uint8_t* txdata, uint32_t txlen)
         r = i2c_m_sync_transfer(&I2C_0, &packet);
         delay_ms(I2C_ECC_RETRY_DELAY);
     } while (retries-- && r != I2C_OK);
+    screen_sprintf_debug(1000, "WRITE RES %d %d %d", r, I2C_OK, txlen);
 
     return (r == I2C_OK ? 0 : 1);
 }
@@ -70,9 +73,9 @@ uint8_t i2c_ecc_sleep(void)
     uint8_t cmd = I2C_ECC_CHIP_SLEEP;
     return i2c_ecc_write(&cmd, 1);
 }
-
 uint8_t i2c_ecc_wake(void)
 {
+    screen_print_debug("WAKE", 1000);
     uint8_t buf[] = {0x00, 0x00, 0x00, 0x00};
     uint8_t expected[] = {0x04, I2C_ECC_WAKE, 0x33, 0x43};
 

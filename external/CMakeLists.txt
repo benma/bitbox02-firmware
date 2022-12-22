@@ -190,7 +190,6 @@ set_property(TARGET asf4-drivers PROPERTY INTERFACE_LINK_LIBRARIES "")
 
   add_library(cryptoauthlib
     cryptoauthlib/lib/atca_cfgs.c
-    cryptoauthlib/lib/atca_command.c
     cryptoauthlib/lib/atca_device.c
     cryptoauthlib/lib/atca_iface.c
     cryptoauthlib/lib/hal/atca_hal.c
@@ -198,6 +197,7 @@ set_property(TARGET asf4-drivers PROPERTY INTERFACE_LINK_LIBRARIES "")
     cryptoauthlib/lib/atca_basic.c
     cryptoauthlib/lib/atca_debug.c
     cryptoauthlib/lib/calib/calib_basic.c
+    #cryptoauthlib/lib/calib/calib_helpers.c
     cryptoauthlib/lib/calib/calib_command.c
     cryptoauthlib/lib/calib/calib_execution.c
     cryptoauthlib/lib/calib/calib_counter.c
