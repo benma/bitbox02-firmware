@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "reset.h"
+#ifndef _SENSORS_H_
+#define _SENSORS_H_
 
-#include <screen.h>
-#include <ui/components/sensors.h>
-#include <ui/screen_stack.h>
-#include <workflow/blocking.h>
+#include "ui/component.h"
 
-void reset_reset(bool status)
-{
-    (void)status;
-    ui_screen_stack_push(sensors_create(NULL, NULL));
-    workflow_blocking_block();
-}
+#include <stdbool.h>
+
+/**
+ * Creates an orientation screen and registers a done callback.
+ * @param[in] done_callback The callback that is called when the orientation has been selected.
+ * @param[in] cb_param The user-defined parameter that will be passed into the callback when it's
+ * invoked.
+ */
+component_t* sensors_create(void (*done_callback)(bool, void*), void* cb_param);
+
+#endif
