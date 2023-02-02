@@ -54,7 +54,7 @@ dockerdev () {
            --name="$CONTAINER_NAME" \
            -v "$repo_path":"$MOUNT_DIR" \
            --cap-add SYS_PTRACE \
-           ${CONTAINER_IMAGE} bash
+           ${CONTAINER_IMAGE}:29 bash
 
     # Use same user/group id as on the host, so that files are not created as root in the mounted
     # volume.

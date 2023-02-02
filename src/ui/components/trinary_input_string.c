@@ -36,6 +36,7 @@
 
 #ifndef TESTING
 #include <driver_init.h>
+#include <qtouch.h>
 #endif
 
 #define EMPTY_CHAR '_'
@@ -147,6 +148,21 @@ static void _render(component_t* component)
 {
     static int frame_counter = 0;
     frame_counter++;
+
+    char calibtext[1000] = {0};
+    int calibinterval = 200*10;
+    snprintf(calibtext,sizeof(calibtext),"%d", calibinterval-frame_counter%calibinterval);
+    UG_PutStringNoBreak(
+            0,
+            0,
+            calibtext,
+            false);
+
+    if ((frame_counter % calibinterval) == 0) {
+        screen_print_debug("Calibrating in 3s", 3000);
+        screen_print_debug("Calibrated", 200);
+        qtouch_force_calibrate();
+    }
     bool blink = (frame_counter % BLINK_RATE) < (BLINK_RATE / 2);
 
     data_t* data = (data_t*)component->data;
