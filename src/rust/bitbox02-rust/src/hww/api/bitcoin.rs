@@ -158,7 +158,7 @@ async fn address_simple(
             scrollable: true,
             ..Default::default()
         };
-        confirm::confirm(&confirm_params).await?;
+        crate::bb02_async::block_on(confirm::confirm(&confirm_params))?;
     }
     Ok(Response::Pub(pb::PubResponse { r#pub: address }))
 }
