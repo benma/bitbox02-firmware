@@ -569,7 +569,7 @@ uint16_t qtouch_get_sensor_node_signal_filtered(uint16_t sensor_node)
 {
     // Filter the sensor signal.
     //
-    // Smooth it out and saturate it so that values never go beyond 50.
+    // Smooth it out and saturate it so that values never go beyond DEF_SENSOR_CEILING.
     // This helps to mitigate 'jumpy' channels that exist at higher sensor readings when
     // in noisy environments.
     //
@@ -591,7 +591,7 @@ uint16_t qtouch_get_sensor_node_signal_filtered(uint16_t sensor_node)
         X = (uint16_t)((double)X * (1 + DEF_SENSOR_EDGE_WEIGHT));
     }
     // Saturate out-of-range readings.
-    X = (X > 50) ? 50 : X;
+    X = (X > DEF_SENSOR_CEILING) ? DEF_SENSOR_CEILING : X;
 
     // Calculate sensor readout using a moving average
     // The moving average wieghts previous N readings twice current reading
@@ -629,7 +629,7 @@ void qtouch_process_scroller_positions(void)
         uint8_t i, j;
         uint16_t sum = 0;
         uint16_t max_sensor_reading = 0;
-        uint16_t min_sensor_reading = 50;
+        uint16_t min_sensor_reading = DEF_SENSOR_CEILING;
         uint16_t weighted_sum = 0;
         uint16_t sensor_location[DEF_SCROLLER_NUM_CHANNELS] = {
             1, // Offset by `1` because a `0` location cannot be weight-averaged
