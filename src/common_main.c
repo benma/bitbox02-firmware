@@ -68,6 +68,23 @@ static bool _setup_wally(void)
     return wally_set_operations(&_ops) == WALLY_OK;
 }
 
+static void _bootloader_autoenter(void)
+{
+    auto_enter_t auto_enter = {
+        .value = sectrue_u8,
+    };
+    upside_down_t upside_down = {
+        .value = screen_is_upside_down(),
+            };
+    if (!memory_bootloader_set_flags(auto_enter, upside_down)) {
+        if (!memory_bootloader_set_flags(auto_enter, upside_down)) {
+            if (!memory_bootloader_set_flags(auto_enter, upside_down)) {
+                // If this failed, we might not be able to reboot into the bootloader.
+            }
+        }
+    }
+}
+
 void common_main(void)
 {
     mpu_bitbox02_init();
@@ -95,4 +112,6 @@ void common_main(void)
             securechip_result);
         AbortAutoenter(errmsg);
     }
+    _bootloader_autoenter();
+    screen_print_debug("DEBUG VERSION\n2023-02-28\nNOT FOR VALUE", 2500);
 }
