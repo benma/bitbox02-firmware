@@ -67,6 +67,7 @@ dockerdev () {
            --interactive --tty \
            --name="$CONTAINER_NAME" \
            -v "$repo_path":"$MOUNT_DIR" \
+           -v "/home/user/coding/rust-miniscript:/rust-minisript" \
            --cap-add SYS_PTRACE \
            ${CONTAINER_IMAGE} bash
 

@@ -1,0 +1,93 @@
+on: [push, pull_request]
+
+name: Continuous integration
+
+jobs:
+  Nightly:
+    name: Nightly - Bench + Docs + Fmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Crate
+        uses: actions/checkout@v2
+      - name: Checkout Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+      - name: Running benchmarks
+        env:
+          DO_BENCH: true
+        run: ./contrib/test.sh
+      - name: Building docs
+        env:
+          DO_DOCS: true
+        run: ./contrib/test.sh
+      - name: Running formatter
+        env:
+          DO_FMT: true
+        run: ./contrib/test.sh
+
+  Int-tests:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Crate
+        uses: actions/checkout@v2
+      - name: Checkout Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Running integration tests
+        env:
+          DO_BITCOIND_TESTS: true
+        run: ./contrib/test.sh
+
+  Tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - rust: stable
+          - rust: beta
+          - rust: nightly
+          - rust: 1.41.1
+          - rust: 1.47
+    steps:
+      - name: Checkout Crate
+        uses: actions/checkout@v2
+      - name: Checkout Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+      - name: Running cargo
+        env:
+          DO_FEATURE_MATRIX: true
+          DO_NO_STD: true
+        run: ./contrib/test.sh
+
+  Embedded:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up QEMU
+        run: sudo apt update && sudo apt install -y qemu-system-arm gcc-arm-none-eabi
+      - name: Checkout Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+          components: rust-src
+          target: thumbv7m-none-eabi
+      - name: Run
+        env:
+          RUSTFLAGS: "-C link-arg=-Tlink.x"
+          CARGO_TARGET_THUMBV7M_NONE_EABI_RUNNER: "qemu-system-arm -cpu cortex-m3 -machine mps2-an385 -nographic -semihosting-config enable=on,target=native -kernel"
+        run: cd embedded && cargo run --target thumbv7m-none-eabi --release
