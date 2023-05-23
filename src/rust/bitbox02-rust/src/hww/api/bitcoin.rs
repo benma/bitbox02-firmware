@@ -153,8 +153,9 @@ async fn address_simple(
     keypath: &[u32],
     display: bool,
 ) -> Result<Response, Error> {
-    let desc = miniscript::Descriptor::<String>::from_str(
-        "wsh(or_b(and_b(pk(02dbf5e2658c72477a541682d7fc72c1d0f071bf24e1f9dd22b01dc0f2f9cf9363),s:pk(03a9743dad99f635cb5a566caba283e49fbdac038b5552ab670dc77170f0bbfc5d)),s:pk(03d14b288e4c84f2a8c198cf78a22c7161ec38ed856b0f403be2fab5acc483176d)))"
+    let desc: miniscript::miniscript::Miniscript<String, miniscript::miniscript::Segwitv0> =
+        miniscript::miniscript::Miniscript::from_str(
+        "or_b(and_b(pk(02dbf5e2658c72477a541682d7fc72c1d0f071bf24e1f9dd22b01dc0f2f9cf9363),s:pk(03a9743dad99f635cb5a566caba283e49fbdac038b5552ab670dc77170f0bbfc5d)),s:pk(03d14b288e4c84f2a8c198cf78a22c7161ec38ed856b0f403be2fab5acc483176d))"
     )
     .unwrap();
     assert!(desc.sanity_check().is_ok());

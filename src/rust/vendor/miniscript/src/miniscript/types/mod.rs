@@ -21,12 +21,6 @@ pub use self::malleability::{Dissat, Malleability};
 use super::ScriptContext;
 use crate::{MiniscriptKey, Terminal};
 
-/// None-returning function to help type inference when we need a
-/// closure that simply returns `None`
-fn return_none<T>(_: usize) -> Option<T> {
-    None
-}
-
 /// Detailed type of a typechecker error
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum ErrorKind {
@@ -375,20 +369,12 @@ pub trait Property: Sized {
     /// Compute the type of a fragment, given a function to look up
     /// the types of its children, if available and relevant for the
     /// given fragment
-    fn type_check<Pk, Ctx, C>(
-        fragment: &Terminal<Pk, Ctx>,
-        mut child: C,
-    ) -> Result<Self, Error<Pk, Ctx>>
+    fn type_check<Pk, Ctx>(fragment: &Terminal<Pk, Ctx>) -> Result<Self, Error<Pk, Ctx>>
     where
-        C: FnMut(usize) -> Option<Self>,
         Pk: MiniscriptKey,
         Ctx: ScriptContext,
     {
-        let mut get_child = |sub, n| {
-            child(n)
-                .map(Ok)
-                .unwrap_or_else(|| Self::type_check(sub, return_none))
-        };
+        let get_child = |sub, n| Self::type_check(sub);
         let wrap_err = |result: Result<Self, ErrorKind>| {
             result.map_err(|kind| Error {
                 fragment: fragment.clone(),
@@ -770,12 +756,8 @@ impl Property for Type {
 
     /// Compute the type of a fragment assuming all the children of
     /// Miniscript have been computed already.
-    fn type_check<Pk, Ctx, C>(
-        fragment: &Terminal<Pk, Ctx>,
-        _child: C,
-    ) -> Result<Self, Error<Pk, Ctx>>
+    fn type_check<Pk, Ctx>(fragment: &Terminal<Pk, Ctx>) -> Result<Self, Error<Pk, Ctx>>
     where
-        C: FnMut(usize) -> Option<Self>,
         Pk: MiniscriptKey,
         Ctx: ScriptContext,
     {

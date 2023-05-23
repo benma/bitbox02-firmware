@@ -501,7 +501,7 @@ dependencies = [
 [[package]]
 name = "miniscript"
 version = "9.0.0"
-source = "git+file:///rust-minisript#be276371aa04465f882c2eb08201d169653ed89f"
+source = "git+file:///rust-miniscript?branch=wip#41de4ba64f775af63dbc85b9284fbf1f84d189bf"
 dependencies = [
  "bitcoin",
  "bitcoin-private",
