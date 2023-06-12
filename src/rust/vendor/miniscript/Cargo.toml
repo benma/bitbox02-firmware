@@ -35,7 +35,7 @@ required-features = [
 
 [[example]]
 name = "parse"
-required-features = ["std"]
+required-features = []
 
 [[example]]
 name = "sign_multisig"

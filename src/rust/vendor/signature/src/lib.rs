@@ -1,25 +1,13 @@
-//! RustCrypto: `signature` crate.
-//!
-//! Traits which provide generic, object-safe APIs for generating and verifying
-//! digital signatures, i.e. message authentication using public-key cryptography.
-//!
-//! ## Minimum Supported Rust Version
-//!
-//! Rust **1.41** or higher.
-//!
-//! Minimum supported Rust version may be changed in the future, but such
-//! changes will be accompanied with a minor version bump.
-//!
-//! ## SemVer policy
-//!
-//! - MSRV is considered exempt from SemVer as noted above
-//! - All on-by-default features of this library are covered by SemVer
-//! - Off-by-default features ending in `*-preview` (e.g. `derive-preview`,
-//!   `digest-preview`) are unstable "preview" features which are also
-//!   considered exempt from SemVer (typically because they rely on pre-1.0
-//!   crates as dependencies). However, breaking changes to these features
-//!   will, like MSRV, also be accompanied by a minor version bump.
-//!
+#![no_std]
+#![doc = include_str!("../README.md")]
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/RustCrypto/media/8f1a9894/logo.svg",
+    html_favicon_url = "https://raw.githubusercontent.com/RustCrypto/media/8f1a9894/logo.svg"
+)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![forbid(unsafe_code)]
+#![warn(missing_docs, rust_2018_idioms, unused_qualifications)]
+
 //! # Design
 //!
 //! This crate provides a common set of traits for signing and verifying
@@ -155,32 +143,53 @@
 //! [`Digest`]: https://docs.rs/digest/latest/digest/trait.Digest.html
 //! [Fiat-Shamir heuristic]: https://en.wikipedia.org/wiki/Fiat%E2%80%93Shamir_heuristic
 
-#![no_std]
-#![cfg_attr(docsrs, feature(doc_cfg))]
-#![doc(
-    html_logo_url = "https://raw.githubusercontent.com/RustCrypto/media/8f1a9894/logo.svg",
-    html_favicon_url = "https://raw.githubusercontent.com/RustCrypto/media/8f1a9894/logo.svg",
-    html_root_url = "https://docs.rs/signature/1.3.1"
-)]
-#![forbid(unsafe_code)]
-#![warn(missing_docs, rust_2018_idioms, unused_qualifications)]
-
 #[cfg(feature = "std")]
 extern crate std;
+
+#[cfg(all(feature = "signature_derive", not(feature = "derive-preview")))]
+compile_error!(
+    "The `signature_derive` feature should not be enabled directly. \
+    Use the `derive-preview` feature instead."
+);
+
+#[cfg(all(feature = "digest", not(feature = "digest-preview")))]
+compile_error!(
+    "The `digest` feature should not be enabled directly. \
+    Use the `digest-preview` feature instead."
+);
+
+#[cfg(all(feature = "rand_core", not(feature = "rand-preview")))]
+compile_error!(
+    "The `rand_core` feature should not be enabled directly. \
+    Use the `rand-preview` feature instead."
+);
+
+#[cfg(feature = "hazmat-preview")]
+#[cfg_attr(docsrs, doc(cfg(feature = "hazmat-preview")))]
+pub mod hazmat;
+
+mod error;
+mod keypair;
+mod signature;
+mod signer;
+mod verifier;
 
 #[cfg(feature = "derive-preview")]
 #[cfg_attr(docsrs, doc(cfg(feature = "derive-preview")))]
 pub use signature_derive::{Signer, Verifier};
 
+#[cfg(all(feature = "derive-preview", feature = "digest-preview"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(feature = "derive-preview", feature = "digest-preview")))
+)]
+pub use signature_derive::{DigestSigner, DigestVerifier};
+
 #[cfg(feature = "digest-preview")]
 pub use digest;
 
 #[cfg(feature = "rand-preview")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rand-preview")))]
 pub use rand_core;
 
-mod error;
-mod signature;
-mod signer;
-mod verifier;
-
-pub use crate::{error::*, signature::*, signer::*, verifier::*};
+pub use crate::{error::*, keypair::*, signature::*, signer::*, verifier::*};

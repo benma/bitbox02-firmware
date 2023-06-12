@@ -14,11 +14,12 @@ macro_rules! __unless_target_features {
     ($($tf:tt),+ => $body:expr ) => {{
         #[cfg(not(all($(target_feature=$tf,)*)))]
         {
-            #[cfg(not(target_env = "sgx"))]
+            #[cfg(not(any(target_env = "sgx", target_os = "none", target_os = "uefi")))]
             $body
 
-            // CPUID is not available on SGX targets
-            #[cfg(target_env = "sgx")]
+            // CPUID is not available on SGX. Freestanding and UEFI targets
+            // do not support SIMD features with default compilation flags.
+            #[cfg(any(target_env = "sgx", target_os = "none", target_os = "uefi"))]
             false
         }
 
@@ -99,7 +100,15 @@ __expand_check_macro! {
     ("bmi1", 1, ebx, 3),
     ("avx2", 0, ecx, 28, 1, ebx, 5),
     ("bmi2", 1, ebx, 8),
+    ("avx512f", 1, ebx, 16),
+    ("avx512dq", 1, ebx, 17),
     ("rdseed", 1, ebx, 18),
     ("adx", 1, ebx, 19),
+    ("avx512ifma", 1, ebx, 21),
+    ("avx512pf", 1, ebx, 26),
+    ("avx512er", 1, ebx, 27),
+    ("avx512cd", 1, ebx, 28),
     ("sha", 1, ebx, 29),
+    ("avx512bw", 1, ebx, 30),
+    ("avx512vl", 1, ebx, 31),
 }

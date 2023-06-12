@@ -12,7 +12,7 @@
 
 [package]
 name = "curve25519-dalek"
-version = "3.0.0"
+version = "3.2.0"
 authors = ["Isis Lovecruft <isis@patternsinthevoid.net>", "Henry de Valence <hdevalence@hdevalence.ca>"]
 exclude = ["**/.gitignore", ".gitignore", ".travis.yml"]
 description = "A pure-Rust implementation of group operations on ristretto255 and Curve25519"
@@ -38,10 +38,15 @@ default-features = false
 version = "0.9"
 default-features = false
 
+[dependencies.fiat-crypto]
+version = "0.1.6"
+optional = true
+
 [dependencies.packed_simd]
-version = "0.3"
+version = "0.3.4"
 features = ["into_bits"]
 optional = true
+package = "packed_simd_2"
 
 [dependencies.rand_core]
 version = "0.5"
@@ -66,6 +71,9 @@ version = "1"
 [dev-dependencies.criterion]
 version = "0.3.0"
 
+[dev-dependencies.hex]
+version = "0.4.2"
+
 [dev-dependencies.rand]
 version = "0.7"
 
@@ -77,6 +85,8 @@ default-features = false
 alloc = ["zeroize/alloc"]
 avx2_backend = ["simd_backend"]
 default = ["std", "u64_backend"]
+fiat_u32_backend = ["fiat-crypto"]
+fiat_u64_backend = ["fiat-crypto"]
 nightly = ["subtle/nightly"]
 simd_backend = ["nightly", "u64_backend", "packed_simd"]
 std = ["alloc", "subtle/std", "rand_core/std"]

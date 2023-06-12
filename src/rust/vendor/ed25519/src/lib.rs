@@ -1,25 +1,16 @@
-//! Ed25519 signatures.
-//!
-//! Edwards Digital Signature Algorithm (EdDSA) over Curve25519 as specified in
-//! RFC 8032: <https://tools.ietf.org/html/rfc8032>
-//!
-//! This crate doesn't contain an implementation of Ed25519, but instead
-//! contains an [`ed25519::Signature`][`Signature`] type which other crates can
-//! use in conjunction with the [`signature::Signer`] and
-//! [`signature::Verifier`] traits defined in the [`signature`] crate.
-//!
-//! These traits allow crates which produce and consume Ed25519 signatures
-//! to be written abstractly in such a way that different signing_key/verifier
-//! providers can be plugged in, enabling support for using different
-//! Ed25519 implementations, including HSMs or Cloud KMS services.
-//!
-//! ## Minimum Supported Rust Version
-//!
-//! Rust **1.47** or higher.
-//!
-//! Minimum supported Rust version may be changed in the future, but such
-//! changes will be accompanied with a minor version bump.
-//!
+#![no_std]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../README.md")]
+#![doc(html_logo_url = "https://raw.githubusercontent.com/RustCrypto/meta/master/logo_small.png")]
+#![forbid(unsafe_code)]
+#![warn(
+    clippy::unwrap_used,
+    missing_docs,
+    rust_2018_idioms,
+    unused_lifetimes,
+    unused_qualifications
+)]
+
 //! # Using Ed25519 generically over algorithm implementations/providers
 //!
 //! By using the `ed25519` crate, you can write code which signs and verifies
@@ -159,7 +150,7 @@
 //! instantiate and use the previously defined `HelloSigner` and `HelloVerifier`
 //! types with [`ring-compat`] as the signing/verification provider:
 //!
-//! ```
+//! ```ignore
 //! use ring_compat::signature::{
 //!     ed25519::{Signature, SigningKey, VerifyingKey},
 //!     Signer, Verifier
@@ -234,21 +225,19 @@
 //!
 //! - [`ed25519-dalek`] - mature pure Rust implementation of Ed25519
 //! - [`ring-compat`] - compatibility wrapper for [*ring*]
-//! - [`signatory-sodiumoxide`] - compatibility wrapper for [`sodiumoxide`]
 //! - [`yubihsm`] - host-side client library for YubiHSM2 devices from Yubico
 //!
 //! [`ed25519-dalek`]: https://docs.rs/ed25519-dalek
 //! [`ring-compat`]: https://docs.rs/ring-compat
 //! [*ring*]: https://github.com/briansmith/ring
-//! [`signatory-ring`]: https://docs.rs/signatory-ring/
-//! [`signatory-sodiumoxide`]: https://docs.rs/signatory-sodiumoxide/
-//! [`sodiumoxide`]: https://github.com/sodiumoxide/sodiumoxide
 //! [`yubihsm`]: https://github.com/iqlusioninc/yubihsm.rs/blob/develop/README.md
 //!
 //! # Features
 //!
 //! The following features are presently supported:
 //!
+//! - `pkcs8`: support for decoding/encoding PKCS#8-formatted private keys using the
+//!   [`KeypairBytes`] type.
 //! - `std` *(default)*: Enable `std` support in [`signature`], which currently only affects whether
 //!   [`signature::Error`] implements `std::error::Error`.
 //! - `serde`: Implement `serde::Deserialize` and `serde::Serialize` for [`Signature`]. Signatures
@@ -266,93 +255,41 @@
 //!   struct SignatureAsBytes(#[serde(with = "serde_bytes")] Signature);
 //!   ```
 
-#![no_std]
-#![doc(
-    html_logo_url = "https://raw.githubusercontent.com/RustCrypto/meta/master/logo_small.png",
-    html_root_url = "https://docs.rs/ed25519/1.2.0"
-)]
-#![forbid(unsafe_code)]
-#![warn(missing_docs, rust_2018_idioms, unused_qualifications)]
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
+#[cfg(feature = "pkcs8")]
+#[cfg_attr(docsrs, doc(cfg(feature = "pkcs8")))]
+pub mod pkcs8;
 
 #[cfg(feature = "serde")]
-use serde::{de, ser, Deserialize, Serialize};
-#[cfg(feature = "serde_bytes")]
-use serde_bytes_crate as serde_bytes;
-
-#[cfg(all(feature = "std", any(test, feature = "serde_bytes")))]
-extern crate std;
+mod serde;
 
 pub use signature::{self, Error};
 
-use core::{
-    convert::{TryFrom, TryInto},
-    fmt::{self, Debug},
-};
+#[cfg(feature = "pkcs8")]
+pub use crate::pkcs8::KeypairBytes;
 
-/// Length of an Ed25519 signature
-pub const SIGNATURE_LENGTH: usize = 64;
+use core::{fmt, str};
+
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
+
+/// Length of an Ed25519 signature in bytes.
+#[deprecated(since = "1.3.0", note = "use ed25519::Signature::BYTE_SIZE instead")]
+pub const SIGNATURE_LENGTH: usize = Signature::BYTE_SIZE;
 
 /// Ed25519 signature.
-#[derive(Copy, Clone)]
-pub struct Signature([u8; SIGNATURE_LENGTH]);
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub struct Signature([u8; Signature::BYTE_SIZE]);
 
 impl Signature {
-    /// Create a new signature from a byte array
-    pub fn new(bytes: [u8; SIGNATURE_LENGTH]) -> Self {
-        Self::from(bytes)
-    }
+    /// Size of an encoded Ed25519 signature in bytes.
+    pub const BYTE_SIZE: usize = 64;
 
-    /// Return the inner byte array
-    #[allow(clippy::wrong_self_convention)] // TODO: fix in next breaking release
-    pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
-        self.0
-    }
-}
-
-impl signature::Signature for Signature {
-    fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        bytes.try_into()
-    }
-}
-
-impl AsRef<[u8]> for Signature {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-}
-
-// can't derive `Debug`, `PartialEq`, or `Eq` below because core array types
-// only have  trait implementations for lengths 0..=32
-impl Debug for Signature {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ed25519::Signature({:?})", &self.0[..])
-    }
-}
-
-// TODO(tarcieri): derive `Eq` after const generics are available
-impl Eq for Signature {}
-
-// TODO(tarcieri): derive `PartialEq` after const generics are available
-impl PartialEq for Signature {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_ref().eq(other.as_ref())
-    }
-}
-
-impl From<[u8; SIGNATURE_LENGTH]> for Signature {
-    fn from(bytes: [u8; SIGNATURE_LENGTH]) -> Signature {
-        Signature(bytes)
-    }
-}
-
-impl<'a> TryFrom<&'a [u8]> for Signature {
-    type Error = Error;
-
-    fn try_from(bytes: &'a [u8]) -> Result<Self, Error> {
-        // TODO(tarcieri): use TryInto when const generics are available
-        if bytes.len() != SIGNATURE_LENGTH {
-            return Err(Error::new());
-        }
+    /// Parse an Ed25519 signature from a byte slice.
+    pub fn from_bytes(bytes: &[u8]) -> signature::Result<Self> {
+        let result = bytes.try_into().map(Self).map_err(|_| Error::new())?;
 
         // Perform a partial reduction check on the signature's `s` scalar.
         // When properly reduced, at least the three highest bits of the scalar
@@ -362,171 +299,155 @@ impl<'a> TryFrom<&'a [u8]> for Signature {
         // full reduction check in the event that the 4th most significant bit
         // is set), however it will catch a number of invalid signatures
         // relatively inexpensively.
-        if bytes[SIGNATURE_LENGTH - 1] & 0b1110_0000 != 0 {
+        if result.0[Signature::BYTE_SIZE - 1] & 0b1110_0000 != 0 {
             return Err(Error::new());
         }
 
-        let mut arr = [0u8; SIGNATURE_LENGTH];
-        arr.copy_from_slice(bytes);
-        Ok(Signature(arr))
+        Ok(result)
+    }
+
+    /// Return the inner byte array.
+    pub fn to_bytes(self) -> [u8; Self::BYTE_SIZE] {
+        self.0
+    }
+
+    /// Convert this signature into a byte vector.
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+
+    /// DEPRECATED: Create a new signature from a byte array.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if an invalid signature is encountered.
+    ///
+    /// Use [`Signature::from_bytes`] or [`Signature::try_from`] instead for
+    /// a fallible conversion.
+    #[deprecated(since = "1.3.0", note = "use ed25519::Signature::from_bytes instead")]
+    pub fn new(bytes: [u8; Self::BYTE_SIZE]) -> Self {
+        Self::from_bytes(&bytes[..]).expect("invalid signature")
     }
 }
 
-#[cfg(feature = "serde")]
-impl Serialize for Signature {
-    fn serialize<S: ser::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        use ser::SerializeTuple;
+impl signature::Signature for Signature {
+    fn from_bytes(bytes: &[u8]) -> signature::Result<Self> {
+        Self::from_bytes(bytes)
+    }
+}
 
-        let mut seq = serializer.serialize_tuple(SIGNATURE_LENGTH)?;
+impl AsRef<[u8]> for Signature {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
 
-        for byte in &self.0[..] {
-            seq.serialize_element(byte)?;
+impl From<Signature> for [u8; Signature::BYTE_SIZE] {
+    fn from(sig: Signature) -> [u8; Signature::BYTE_SIZE] {
+        sig.0
+    }
+}
+
+impl From<&Signature> for [u8; Signature::BYTE_SIZE] {
+    fn from(sig: &Signature) -> [u8; Signature::BYTE_SIZE] {
+        sig.0
+    }
+}
+
+/// DEPRECATED: use `TryFrom<&[u8]>` instead.
+///
+/// # Warning
+///
+/// This conversion will panic if a signature is invalid.
+// TODO(tarcieri): remove this in the next breaking release
+impl From<[u8; Signature::BYTE_SIZE]> for Signature {
+    fn from(bytes: [u8; Signature::BYTE_SIZE]) -> Signature {
+        #[allow(deprecated)]
+        Signature::new(bytes)
+    }
+}
+
+impl TryFrom<&[u8]> for Signature {
+    type Error = Error;
+
+    fn try_from(bytes: &[u8]) -> signature::Result<Self> {
+        Self::from_bytes(bytes)
+    }
+}
+
+impl fmt::Debug for Signature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ed25519::Signature({})", self)
+    }
+}
+
+impl fmt::Display for Signature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:X}", self)
+    }
+}
+
+impl fmt::LowerHex for Signature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for byte in &self.0 {
+            write!(f, "{:02x}", byte)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::UpperHex for Signature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for byte in &self.0 {
+            write!(f, "{:02X}", byte)?;
+        }
+        Ok(())
+    }
+}
+
+/// Decode a signature from hexadecimal.
+///
+/// Upper and lower case hexadecimal are both accepted, however mixed case is
+/// rejected.
+// TODO(tarcieri): use `base16ct`?
+impl str::FromStr for Signature {
+    type Err = Error;
+
+    fn from_str(hex: &str) -> signature::Result<Self> {
+        if hex.as_bytes().len() != Signature::BYTE_SIZE * 2 {
+            return Err(Error::new());
         }
 
-        seq.end()
-    }
-}
+        let mut upper_case = None;
 
-// serde lacks support for deserializing arrays larger than 32-bytes
-// see: <https://github.com/serde-rs/serde/issues/631>
-#[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for Signature {
-    fn deserialize<D: de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct ByteArrayVisitor;
-
-        impl<'de> de::Visitor<'de> for ByteArrayVisitor {
-            type Value = [u8; SIGNATURE_LENGTH];
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("bytestring of length 64")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<[u8; SIGNATURE_LENGTH], A::Error>
-            where
-                A: de::SeqAccess<'de>,
-            {
-                use de::Error;
-                let mut arr = [0u8; SIGNATURE_LENGTH];
-
-                for (i, byte) in arr.iter_mut().enumerate() {
-                    *byte = seq
-                        .next_element()?
-                        .ok_or_else(|| Error::invalid_length(i, &self))?;
-                }
-
-                Ok(arr)
+        // Ensure all characters are valid and case is not mixed
+        for &byte in hex.as_bytes() {
+            match byte {
+                b'0'..=b'9' => (),
+                b'a'..=b'z' => match upper_case {
+                    Some(true) => return Err(Error::new()),
+                    Some(false) => (),
+                    None => upper_case = Some(false),
+                },
+                b'A'..=b'Z' => match upper_case {
+                    Some(true) => (),
+                    Some(false) => return Err(Error::new()),
+                    None => upper_case = Some(true),
+                },
+                _ => return Err(Error::new()),
             }
         }
 
-        deserializer
-            .deserialize_tuple(SIGNATURE_LENGTH, ByteArrayVisitor)
-            .map(|bytes| bytes.into())
-    }
-}
-
-#[cfg(feature = "serde_bytes")]
-impl serde_bytes::Serialize for Signature {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_bytes(&self.0)
-    }
-}
-
-#[cfg(feature = "serde_bytes")]
-impl<'de> serde_bytes::Deserialize<'de> for Signature {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        struct ByteArrayVisitor;
-
-        impl<'de> de::Visitor<'de> for ByteArrayVisitor {
-            type Value = [u8; SIGNATURE_LENGTH];
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("bytestring of length 64")
-            }
-
-            fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                use de::Error;
-
-                bytes
-                    .try_into()
-                    .map_err(|_| Error::invalid_length(bytes.len(), &self))
-            }
+        let mut result = [0u8; Self::BYTE_SIZE];
+        for (digit, byte) in hex.as_bytes().chunks_exact(2).zip(result.iter_mut()) {
+            *byte = str::from_utf8(digit)
+                .ok()
+                .and_then(|s| u8::from_str_radix(s, 16).ok())
+                .ok_or_else(Error::new)?;
         }
 
-        deserializer
-            .deserialize_bytes(ByteArrayVisitor)
-            .map(Signature::from)
-    }
-}
-
-#[cfg(all(test, feature = "serde", feature = "std"))]
-mod tests {
-    use super::*;
-    use signature::Signature as _;
-    use std::{convert::TryFrom, vec::Vec};
-
-    const EXAMPLE_SIGNATURE: [u8; SIGNATURE_LENGTH] = [
-        63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41,
-        40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18,
-        17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
-    ];
-
-    #[test]
-    fn test_serialize() {
-        let signature = Signature::try_from(&EXAMPLE_SIGNATURE[..]).unwrap();
-        let encoded_signature: Vec<u8> = bincode::serialize(&signature).unwrap();
-        assert_eq!(&EXAMPLE_SIGNATURE[..], &encoded_signature[..]);
-    }
-
-    #[test]
-    fn test_deserialize() {
-        let signature = bincode::deserialize::<Signature>(&EXAMPLE_SIGNATURE).unwrap();
-        assert_eq!(&EXAMPLE_SIGNATURE[..], signature.as_bytes());
-    }
-
-    #[cfg(feature = "serde_bytes")]
-    #[test]
-    fn test_serialize_bytes() {
-        use bincode::Options;
-
-        let signature = Signature::try_from(&EXAMPLE_SIGNATURE[..]).unwrap();
-
-        let mut encoded_signature = Vec::new();
-        let options = bincode::DefaultOptions::new()
-            .with_fixint_encoding()
-            .allow_trailing_bytes();
-        let mut serializer = bincode::Serializer::new(&mut encoded_signature, options);
-        serde_bytes::serialize(&signature, &mut serializer).unwrap();
-
-        let mut expected = Vec::from(SIGNATURE_LENGTH.to_le_bytes());
-        expected.extend(&EXAMPLE_SIGNATURE[..]);
-        assert_eq!(&expected[..], &encoded_signature[..]);
-    }
-
-    #[cfg(feature = "serde_bytes")]
-    #[test]
-    fn test_deserialize_bytes() {
-        use bincode::Options;
-
-        let mut encoded_signature = Vec::from(SIGNATURE_LENGTH.to_le_bytes());
-        encoded_signature.extend(&EXAMPLE_SIGNATURE[..]);
-
-        let options = bincode::DefaultOptions::new()
-            .with_fixint_encoding()
-            .allow_trailing_bytes();
-        let mut deserializer =
-            bincode::de::Deserializer::from_slice(&encoded_signature[..], options);
-
-        let signature: Signature = serde_bytes::deserialize(&mut deserializer).unwrap();
-
-        assert_eq!(&EXAMPLE_SIGNATURE[..], signature.as_bytes());
+        Self::try_from(&result[..])
     }
 }

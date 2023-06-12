@@ -4,6 +4,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.5.3 (2023-01-15)
+### Changed
+- Fix `signature` version requirement which accidentally matched v2 or above ([#616])
+
+[#616]: https://github.com/RustCrypto/signatures/pull/616
+
+## 1.5.2 (2022-05-16)
+### Fixed
+- Overflow handling in `serde` deserializers ([#482])
+
+[#482]: https://github.com/RustCrypto/signatures/pull/482
+
+## 1.5.1 (2022-05-15)
+### Fixed
+- Use `TryInto` in `serde` deserializers ([#479])
+
+[#479]: https://github.com/RustCrypto/signatures/pull/479
+
+## 1.5.0 (2022-05-09)
+### Changed
+- Bump `pkcs8` dependency to v0.9 ([#473])
+
+[#473]: https://github.com/RustCrypto/signatures/pull/473
+
+## 1.4.1 (2022-03-18)
+### Added
+- License files ([#447])
+- `pkcs8::PublicKeyBytes` type ([#455])
+
+[#447]: https://github.com/RustCrypto/signatures/pull/447
+[#455]: https://github.com/RustCrypto/signatures/pull/455
+
+## 1.4.0 (2022-02-25) [YANKED]
+
+This crate now requires **Rust 1.56** at a minimum as the Rust edition has been
+upgraded to 2021.
+
+Previous 1.x releases of this crate supported an MSRV of 1.47. If you would
+like to use this crate with earlier releases of Rust, add the following version
+constraint in your project's Cargo.toml to constrain it to the supported
+version range:
+
+```toml
+[dependencies]
+ed25519 = ">=1, <1.4" # ed25519 1.4 requires MSRV 1.56
+```
+
+Note that is our policy that we may change the MSRV in the future, but it will
+be accompanied by a minor version bump.
+
+### Added
+- `Signature::to_vec` ([#428])
+
+### Changed
+- Rust 2021 edition upgrade ([#412])
+
+[#412]: https://github.com/RustCrypto/signatures/pull/412
+[#428]: https://github.com/RustCrypto/signatures/pull/428
+
+## 1.3.0 (2021-11-18)
+### Added
+- `Signature::BYTE_SIZE` constant ([#380])
+- PKCS#8 support via `KeypairBytes` type ([#381])
+- `zeroize` feature ([#400])
+- Impl `Display`/`LowerHex`/`UpperHex`/`FromStr` for `Signature` ([#402])
+
+### Changed
+- Deprecate `SIGNATURE_LENGTH` constant in favor of `Signature::BYTE_SIZE` ([#380])
+- Deprecate `Signature::new` in favor of `Signature::from_bytes`/`TryFrom` ([#401])
+- `Signature::new` now panics on invalid signatures ([#403])
+
+[#380]: https://github.com/RustCrypto/signatures/pull/380
+[#381]: https://github.com/RustCrypto/signatures/pull/381
+[#400]: https://github.com/RustCrypto/signatures/pull/400
+[#401]: https://github.com/RustCrypto/signatures/pull/401
+[#402]: https://github.com/RustCrypto/signatures/pull/402
+[#403]: https://github.com/RustCrypto/signatures/pull/403
+
 ## 1.2.0 (2021-07-21)
 ### Added
 - `serde_bytes` optional dependency ([#337])
