@@ -38,16 +38,14 @@ use crate::keystore;
 use pb::btc_pub_request::{Output, XPubType};
 use pb::btc_request::Request;
 use pb::btc_script_config::multisig::ScriptType as MultisigScriptType;
-use pb::btc_script_config::Multisig;
 use pb::btc_script_config::{Config, SimpleType};
+use pb::btc_script_config::{Descriptor, Multisig};
 use pb::response::Response;
 use pb::BtcCoin;
 use pb::BtcScriptConfig;
 
 use alloc::string::String;
 use core::convert::TryInto;
-
-use core::str::FromStr;
 
 /// Like `hww::next_request`, but for Bitcoin requests/responses.
 pub async fn next_request(response: pb::btc_response::Response) -> Result<Request, Error> {
@@ -153,14 +151,6 @@ async fn address_simple(
     keypath: &[u32],
     display: bool,
 ) -> Result<Response, Error> {
-    let desc: miniscript::miniscript::Miniscript<String, miniscript::miniscript::Segwitv0> =
-        miniscript::miniscript::Miniscript::from_str(
-        "or_b(and_b(pk(02dbf5e2658c72477a541682d7fc72c1d0f071bf24e1f9dd22b01dc0f2f9cf9363),s:pk(03a9743dad99f635cb5a566caba283e49fbdac038b5552ab670dc77170f0bbfc5d)),s:pk(03d14b288e4c84f2a8c198cf78a22c7161ec38ed856b0f403be2fab5acc483176d))"
-    )
-    .unwrap();
-    assert!(desc.sanity_check().is_ok());
-    //    assert_eq!(format!("{:x}", desc.explicit_script().unwrap()), "aa");
-
     let address = derive_address_simple(coin, simple_type, keypath)?;
     if display {
         let confirm_params = confirm::Params {
@@ -215,6 +205,26 @@ pub async fn address_multisig(
     Ok(Response::Pub(pb::PubResponse { r#pub: address }))
 }
 
+async fn address_descriptor(
+    coin: BtcCoin,
+    descriptor: &Descriptor,
+    display: bool,
+) -> Result<Response, Error> {
+    let coin_params = params::get(coin);
+    let title = "Receive to";
+    let address = common::Payload::from_descriptor(descriptor)?.address(coin_params)?;
+    if display {
+        confirm::confirm(&confirm::Params {
+            title,
+            body: &address,
+            scrollable: true,
+            ..Default::default()
+        })
+        .await?;
+    }
+    Ok(Response::Pub(pb::PubResponse { r#pub: address }))
+}
+
 /// Handle a Bitcoin xpub/address protobuf api call.
 pub async fn process_pub(request: &pb::BtcPubRequest) -> Result<Response, Error> {
     let coin = match BtcCoin::from_i32(request.coin) {
@@ -243,6 +253,9 @@ pub async fn process_pub(request: &pb::BtcPubRequest) -> Result<Response, Error>
         Some(Output::ScriptConfig(BtcScriptConfig {
             config: Some(Config::Multisig(ref multisig)),
         })) => address_multisig(coin, multisig, &request.keypath, request.display).await,
+        Some(Output::ScriptConfig(BtcScriptConfig {
+            config: Some(Config::Descriptor(ref descriptor)),
+        })) => address_descriptor(coin, descriptor, request.display).await,
         _ => Err(Error::InvalidInput),
     }
 }

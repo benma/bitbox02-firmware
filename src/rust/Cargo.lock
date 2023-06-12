@@ -117,6 +117,7 @@ dependencies = [
  "bip32-ed25519",
  "bitbox02",
  "bitbox02-noise",
+ "bitcoin",
  "blake2",
  "bs58",
  "crc",

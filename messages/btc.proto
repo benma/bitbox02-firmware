@@ -52,9 +52,14 @@ message BTCScriptConfig {
     ScriptType script_type = 4;
   }
 
+  message Descriptor {
+    string descriptor = 1;
+  }
+
   oneof config {
     SimpleType simple_type = 1;
     Multisig multisig = 2;
+    Descriptor descriptor = 3;
   }
 }
 

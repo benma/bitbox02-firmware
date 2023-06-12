@@ -203,7 +203,7 @@ pub struct AntiKleptoSignatureRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BtcScriptConfig {
-    #[prost(oneof = "btc_script_config::Config", tags = "1, 2")]
+    #[prost(oneof = "btc_script_config::Config", tags = "1, 2, 3")]
     pub config: ::core::option::Option<btc_script_config::Config>,
 }
 /// Nested message and enum types in `BTCScriptConfig`.
@@ -265,6 +265,12 @@ pub mod btc_script_config {
             }
         }
     }
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Descriptor {
+        #[prost(string, tag = "1")]
+        pub descriptor: ::prost::alloc::string::String,
+    }
     /// SimpleType is a "simple" script: one public key, no additional inputs.
     #[derive(
         Clone,
@@ -312,6 +318,8 @@ pub mod btc_script_config {
         SimpleType(i32),
         #[prost(message, tag = "2")]
         Multisig(Multisig),
+        #[prost(message, tag = "3")]
+        Descriptor(Descriptor),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

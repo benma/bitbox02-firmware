@@ -17,6 +17,8 @@ use super::Error;
 
 use crate::xpubcache::Bip32XpubCache;
 
+use core::str::FromStr;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -32,6 +34,8 @@ use sha2::{Digest, Sha256};
 
 const HASH160_LEN: usize = 20;
 const SHA256_LEN: usize = 32;
+
+struct WalletPolicyPubkey {}
 
 /// Converts a satoshi value to a string, suffixed with `unit`, e.g. 1234567890 -> "12.3456789 BTC".
 pub fn format_amount(
@@ -143,6 +147,26 @@ impl Payload {
                     output_type: BtcOutputType::P2sh,
                 })
             }
+        }
+    }
+
+    pub fn from_descriptor(descriptor: &pb::btc_script_config::Descriptor) -> Result<Self, Error> {
+        let desc = descriptor.descriptor.as_str();
+        match desc.as_bytes() {
+            [b'w', b's', b'h', b'(', .., b')'] => {
+                let desc: miniscript::miniscript::Miniscript<
+                    bitcoin::PublicKey,
+                    miniscript::miniscript::Segwitv0,
+                > = miniscript::miniscript::Miniscript::from_str(&desc[4..desc.len() - 1])
+                    .or(Err(Error::InvalidInput))?;
+                desc.sanity_check().or(Err(Error::InvalidInput))?;
+                let pkscript = desc.encode();
+                Ok(Payload {
+                    data: Sha256::digest(pkscript.as_bytes()).to_vec(),
+                    output_type: BtcOutputType::P2wsh,
+                })
+            }
+            _ => Err(Error::InvalidInput),
         }
     }
 

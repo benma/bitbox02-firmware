@@ -398,6 +398,32 @@ class SendMessage:
         except UserAbortException:
             print("Aborted by user")
 
+    def _btc_descriptor_address(self) -> None:
+        try:
+            coin = bitbox02.btc.BTC
+            print(
+                self._device.btc_address(
+                    coin=coin,
+                    keypath=[
+                        48 + HARDENED,
+                        0 + HARDENED,
+                        0 + HARDENED,
+                        2 + HARDENED,
+                        1,
+                        2,
+                    ],
+                    script_config=bitbox02.btc.BTCScriptConfig(
+                        descriptor=bitbox02.btc.BTCScriptConfig.Descriptor(
+                            descriptor="wsh(pk(025dae9bbe2a03e4b4a4ff910f112f94958c5ad90c10ca7e81d5845785c4603f23))",
+                        )
+                    ),
+                    display=True,
+                )
+            )
+        except UserAbortException:
+            print("Aborted by user")
+
+
     def _sign_btc_normal(
         self,
         format_unit: "bitbox02.btc.BTCSignInitRequest.FormatUnit.V" = bitbox02.btc.BTCSignInitRequest.FormatUnit.DEFAULT,
@@ -1207,6 +1233,7 @@ class SendMessage:
             ("Retrieve zpub of first account", self._display_zpub),
             ("Retrieve a BTC address", self._btc_address),
             ("Retrieve a BTC Multisig address", self._btc_multisig_address),
+            ("Retrieve a BTC descriptor address", self._btc_descriptor_address),
             ("Sign a BTC tx", self._sign_btc_tx),
             ("Sign a BTC Message", self._sign_btc_message),
             ("List backups", self._print_backups),
