@@ -35,7 +35,60 @@ use sha2::{Digest, Sha256};
 const HASH160_LEN: usize = 20;
 const SHA256_LEN: usize = 32;
 
-struct WalletPolicyPubkey {}
+use bitcoin::hashes::{hash160, ripemd160, sha256, Hash};
+use miniscript::hash256;
+
+#[derive(Hash, Clone, Ord, Eq, PartialOrd, PartialEq, Debug)]
+struct WalletPolicyPubkey {
+    key: String,
+}
+
+impl core::fmt::Display for WalletPolicyPubkey {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.key)
+    }
+}
+
+impl FromStr for WalletPolicyPubkey {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(WalletPolicyPubkey { key: s.into() })
+    }
+}
+
+impl miniscript::MiniscriptKey for WalletPolicyPubkey {
+    type Sha256 = String; // specify hashes as string
+    type Hash256 = String;
+    type Ripemd160 = String;
+    type Hash160 = String;
+
+    fn num_der_paths(&self) -> usize {
+        0
+    }
+}
+
+impl miniscript::ToPublicKey for WalletPolicyPubkey {
+    fn to_public_key(&self) -> bitcoin::PublicKey {
+        bitcoin::PublicKey::from_str(&self.key).unwrap()
+    }
+
+    fn to_sha256(hash: &<Self as miniscript::MiniscriptKey>::Sha256) -> sha256::Hash {
+        panic!("todo")
+    }
+
+    fn to_hash256(hash: &<Self as miniscript::MiniscriptKey>::Hash256) -> hash256::Hash {
+        panic!("todo")
+    }
+
+    fn to_ripemd160(hash: &<Self as miniscript::MiniscriptKey>::Ripemd160) -> ripemd160::Hash {
+        panic!("todo")
+    }
+
+    fn to_hash160(hash: &<Self as miniscript::MiniscriptKey>::Hash160) -> hash160::Hash {
+        panic!("todo")
+    }
+}
 
 /// Converts a satoshi value to a string, suffixed with `unit`, e.g. 1234567890 -> "12.3456789 BTC".
 pub fn format_amount(
@@ -150,17 +203,23 @@ impl Payload {
         }
     }
 
-    pub fn from_descriptor(descriptor: &pb::btc_script_config::Descriptor) -> Result<Self, Error> {
+    pub fn from_descriptor(
+        descriptor: &pb::btc_script_config::Descriptor,
+        multipath_index: u32,
+        address_index: u32,
+    ) -> Result<Self, Error> {
         let desc = descriptor.descriptor.as_str();
         match desc.as_bytes() {
             [b'w', b's', b'h', b'(', .., b')'] => {
-                let desc: miniscript::miniscript::Miniscript<
-                    bitcoin::PublicKey,
+                let miniscript_expr: miniscript::miniscript::Miniscript<
+                    WalletPolicyPubkey,
                     miniscript::miniscript::Segwitv0,
                 > = miniscript::miniscript::Miniscript::from_str(&desc[4..desc.len() - 1])
                     .or(Err(Error::InvalidInput))?;
-                desc.sanity_check().or(Err(Error::InvalidInput))?;
-                let pkscript = desc.encode();
+                miniscript_expr
+                    .sanity_check()
+                    .or(Err(Error::InvalidInput))?;
+                let pkscript = miniscript_expr.encode();
                 Ok(Payload {
                     data: Sha256::digest(pkscript.as_bytes()).to_vec(),
                     output_type: BtcOutputType::P2wsh,

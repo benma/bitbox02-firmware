@@ -270,6 +270,34 @@ pub mod btc_script_config {
     pub struct Descriptor {
         #[prost(string, tag = "1")]
         pub descriptor: ::prost::alloc::string::String,
+        #[prost(message, repeated, tag = "2")]
+        pub keys: ::prost::alloc::vec::Vec<descriptor::Key>,
+        /// Index to the xpub of our keystore in keys. The keypath to it is provided via
+        /// BTCPubRequest/BTCSignInit.
+        #[prost(uint32, tag = "3")]
+        pub our_key_index: u32,
+    }
+    /// Nested message and enum types in `Descriptor`.
+    pub mod descriptor {
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct Key {
+            /// oneof to reserve potential alternatives for key origins (including root fingerprint and
+            /// keypath), plain pubkey, etc.
+            #[prost(oneof = "key::Key", tags = "1")]
+            pub key: ::core::option::Option<key::Key>,
+        }
+        /// Nested message and enum types in `Key`.
+        pub mod key {
+            /// oneof to reserve potential alternatives for key origins (including root fingerprint and
+            /// keypath), plain pubkey, etc.
+            #[allow(clippy::derive_partial_eq_without_eq)]
+            #[derive(Clone, PartialEq, ::prost::Oneof)]
+            pub enum Key {
+                #[prost(message, tag = "1")]
+                Xpub(super::super::super::XPub),
+            }
+        }
     }
     /// SimpleType is a "simple" script: one public key, no additional inputs.
     #[derive(

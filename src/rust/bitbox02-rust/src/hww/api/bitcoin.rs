@@ -208,11 +208,17 @@ pub async fn address_multisig(
 async fn address_descriptor(
     coin: BtcCoin,
     descriptor: &Descriptor,
+    keypath: &[u32],
     display: bool,
 ) -> Result<Response, Error> {
     let coin_params = params::get(coin);
     let title = "Receive to";
-    let address = common::Payload::from_descriptor(descriptor)?.address(coin_params)?;
+    let address = common::Payload::from_descriptor(
+        descriptor,
+        keypath[keypath.len() - 2],
+        keypath[keypath.len() - 1],
+    )?
+    .address(coin_params)?;
     if display {
         confirm::confirm(&confirm::Params {
             title,
@@ -255,7 +261,7 @@ pub async fn process_pub(request: &pb::BtcPubRequest) -> Result<Response, Error>
         })) => address_multisig(coin, multisig, &request.keypath, request.display).await,
         Some(Output::ScriptConfig(BtcScriptConfig {
             config: Some(Config::Descriptor(ref descriptor)),
-        })) => address_descriptor(coin, descriptor, request.display).await,
+        })) => address_descriptor(coin, descriptor, &request.keypath, request.display).await,
         _ => Err(Error::InvalidInput),
     }
 }

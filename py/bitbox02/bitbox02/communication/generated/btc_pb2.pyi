@@ -125,13 +125,30 @@ class BTCScriptConfig(google.protobuf.message.Message):
 
     class Descriptor(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        class Key(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            XPUB_FIELD_NUMBER: builtins.int
+            @property
+            def xpub(self) -> common_pb2.XPub: ...
+            def __init__(self,
+                *,
+                xpub: typing.Optional[common_pb2.XPub] = ...,
+                ) -> None: ...
+            def HasField(self, field_name: typing_extensions.Literal["key",b"key","xpub",b"xpub"]) -> builtins.bool: ...
+            def ClearField(self, field_name: typing_extensions.Literal["key",b"key","xpub",b"xpub"]) -> None: ...
+            def WhichOneof(self, oneof_group: typing_extensions.Literal["key",b"key"]) -> typing.Optional[typing_extensions.Literal["xpub"]]: ...
+
         DESCRIPTOR_FIELD_NUMBER: builtins.int
+        KEYS_FIELD_NUMBER: builtins.int
         descriptor: typing.Text
+        @property
+        def keys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BTCScriptConfig.Descriptor.Key]: ...
         def __init__(self,
             *,
             descriptor: typing.Text = ...,
+            keys: typing.Optional[typing.Iterable[global___BTCScriptConfig.Descriptor.Key]] = ...,
             ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["descriptor",b"descriptor"]) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["descriptor",b"descriptor","keys",b"keys"]) -> None: ...
 
     SIMPLE_TYPE_FIELD_NUMBER: builtins.int
     MULTISIG_FIELD_NUMBER: builtins.int

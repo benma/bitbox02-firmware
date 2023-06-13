@@ -414,7 +414,8 @@ class SendMessage:
                     ],
                     script_config=bitbox02.btc.BTCScriptConfig(
                         descriptor=bitbox02.btc.BTCScriptConfig.Descriptor(
-                            descriptor="wsh(pk(025dae9bbe2a03e4b4a4ff910f112f94958c5ad90c10ca7e81d5845785c4603f23))",
+                            #descriptor="wsh(pk(025dae9bbe2a03e4b4a4ff910f112f94958c5ad90c10ca7e81d5845785c4603f23))",
+                            descriptor="wsh(and_v(v:pk(025dae9bbe2a03e4b4a4ff910f112f94958c5ad90c10ca7e81d5845785c4603f23),pk(03d7ff038d3aa95b367740e9438fbae40023ea912f8d7e0fafcb5a5c122c7cb15e)))"
                         )
                     ),
                     display=True,
