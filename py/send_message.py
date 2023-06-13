@@ -377,6 +377,22 @@ class SendMessage:
 
         return multisig_config
 
+    def _btc_descriptor_config(self, coin: "bitbox02.btc.BTCCoin.V") -> bitbox02.btc.BTCScriptConfig:
+        return bitbox02.btc.BTCScriptConfig(
+            descriptor=bitbox02.btc.BTCScriptConfig.Descriptor(
+                descriptor="wsh(and_v(v:pk(@0/**),pk(@1/**)))",
+                keys=[
+                    bitbox02.btc.BTCScriptConfig.Descriptor.Key(
+                        xpub=util.parse_xpub("xpub6FEZ9Bv73h1vnE4TJG4QFj2RPXJhhsPbnXgFyH3ErLvpcZrDcynY65bhWga8PazWHLSLi23PoBhGcLcYW6JRiJ12zXZ9Aop4LbAqsS3gtcy"),
+                    ),
+                    bitbox02.btc.BTCScriptConfig.Descriptor.Key(
+                        xpub=util.parse_xpub("xpub6Eq64jDihkRvLg91wnckeTFWDT5jzdoKwX24aL9MHY4pS49E9jH69zFRnHuJzZijQaLZs7t5jtUxUhywhXGtUzsCf5EjunnDUNhzJFqhowa"),
+                    ),
+                ],
+                our_key_index=0,
+            )
+        )
+
     def _btc_multisig_address(self) -> None:
         try:
             coin = bitbox02.btc.BTC
@@ -412,21 +428,7 @@ class SendMessage:
                         1,
                         2,
                     ],
-                    script_config=bitbox02.btc.BTCScriptConfig(
-                        descriptor=bitbox02.btc.BTCScriptConfig.Descriptor(
-                            #descriptor="wsh(pk(025dae9bbe2a03e4b4a4ff910f112f94958c5ad90c10ca7e81d5845785c4603f23))",
-                            descriptor="wsh(and_v(v:pk(@0/**),pk(@1/**)))",
-                            keys=[
-                                bitbox02.btc.BTCScriptConfig.Descriptor.Key(
-                                    xpub=util.parse_xpub("xpub6FEZ9Bv73h1vnE4TJG4QFj2RPXJhhsPbnXgFyH3ErLvpcZrDcynY65bhWga8PazWHLSLi23PoBhGcLcYW6JRiJ12zXZ9Aop4LbAqsS3gtcy"),
-                                ),
-                                bitbox02.btc.BTCScriptConfig.Descriptor.Key(
-                                    xpub=util.parse_xpub("xpub6Eq64jDihkRvLg91wnckeTFWDT5jzdoKwX24aL9MHY4pS49E9jH69zFRnHuJzZijQaLZs7t5jtUxUhywhXGtUzsCf5EjunnDUNhzJFqhowa"),
-                                ),
-                            ],
-                            our_key_index=0,
-                        )
-                    ),
+                    script_config=self._btc_descriptor_config(coin),
                     display=True,
                 )
             )
@@ -613,6 +615,31 @@ class SendMessage:
         for input_index, sig in sigs:
             print("Signature for input {}: {}".format(input_index, sig.hex()))
 
+    def _sign_btc_descriptor(self) -> None:
+        # pylint: disable=no-member
+        bip44_account: int = 0 + HARDENED
+        inputs, outputs = _btc_demo_inputs_outputs(bip44_account)
+        for (i, inp) in enumerate(inputs):
+            inp["keypath"] = [123 + HARDENED, 0 + HARDENED, bip44_account, 0, i]
+            inp["script_config_index"] = 0
+        assert isinstance(outputs[0], bitbox02.BTCOutputInternal)
+        outputs[0].keypath = [123 + HARDENED, 0 + HARDENED, bip44_account, 1, 0]
+
+        coin = bitbox02.btc.BTC
+        sigs = self._device.btc_sign(
+            coin,
+            [
+                bitbox02.btc.BTCScriptConfigWithKeypath(
+                    script_config=self._btc_descriptor_config(coin),
+                    keypath=[123 + HARDENED, 0 + HARDENED, bip44_account],
+                ),
+            ],
+            inputs=inputs,
+            outputs=outputs,
+        )
+        for input_index, sig in sigs:
+            print("Signature for input {}: {}".format(input_index, sig.hex()))
+
     def _sign_btc_tx_from_raw(self) -> None:
         """
         Experiment with testnet transactions.
@@ -715,6 +742,7 @@ class SendMessage:
             ("Locktime/RBF", self._sign_btc_locktime_rbf),
             ("Taproot inputs", self._sign_btc_taproot_inputs),
             ("Taproot output", self._sign_btc_taproot_output),
+            ("Descriptor", self._sign_btc_descriptor),
             ("From testnet tx ID", self._sign_btc_tx_from_raw),
         )
         choice = ask_user(choices)

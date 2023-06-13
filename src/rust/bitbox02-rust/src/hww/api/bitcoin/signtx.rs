@@ -214,6 +214,11 @@ fn validate_keypath(
             keypath::validate_address_multisig(keypath, params.bip44_coin, script_type)
                 .or(Err(Error::InvalidInput))?;
         }
+        Some(pb::BtcScriptConfig {
+            config: Some(pb::btc_script_config::Config::Descriptor(ref descriptor)),
+        }) => {
+            // TODO validate keypath
+        }
         _ => return Err(Error::InvalidInput),
     }
     // Check that keypath_account is a prefix to keypath with two elements left (change, address).
@@ -298,6 +303,18 @@ fn sighash_script(
             keypath[keypath.len() - 2],
             keypath[keypath.len() - 1],
         )?),
+        pb::BtcScriptConfigWithKeypath {
+            script_config:
+                Some(pb::BtcScriptConfig {
+                    config: Some(pb::btc_script_config::Config::Descriptor(ref descriptor)),
+                }),
+            ..
+        } => Ok(common::Payload::from_descriptor(
+            descriptor,
+            keypath[keypath.len() - 2],
+            keypath[keypath.len() - 1],
+        )?
+        .data),
         _ => Err(Error::InvalidInput),
     }
 }
@@ -395,6 +412,20 @@ async fn validate_script_configs(
         let name = super::multisig::get_name(coin_params.coin, multisig, keypath)?
             .ok_or(Error::InvalidInput)?;
         super::multisig::confirm("Spend from", coin_params, &name, multisig).await?;
+        return Ok(());
+    }
+
+    // Then we get descriptors out of the way.
+    if let [pb::BtcScriptConfigWithKeypath {
+        script_config:
+            Some(pb::BtcScriptConfig {
+                config: Some(pb::btc_script_config::Config::Descriptor(ref descriptor)),
+            }),
+        keypath: _,
+    }] = script_configs
+    {
+        let _ = common::Payload::from_descriptor(descriptor, 0, 0)?;
+        // TODO check registration and keypath
         return Ok(());
     }
 

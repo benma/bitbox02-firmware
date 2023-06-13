@@ -135,7 +135,15 @@ struct WalletPolicyPkTranslator<'a> {
 }
 
 fn parse_wallet_policy_pk(pk: &str) -> Result<(usize, u32, u32), ()> {
+    fn validate_no_leading_zero(num: &str) -> Result<(), ()> {
+        if num.len() > 1 && num.starts_with('0') {
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
     let (left, right) = pk.strip_prefix("@").ok_or(())?.split_once('/').ok_or(())?;
+    validate_no_leading_zero(left)?;
     let (receive_index, change_index): (u32, u32) = match right {
         "**" => (0, 1),
         right => {
@@ -146,6 +154,8 @@ fn parse_wallet_policy_pk(pk: &str) -> Result<(usize, u32, u32), ()> {
                 .ok_or(())?
                 .split_once(';')
                 .ok_or(())?;
+            validate_no_leading_zero(left_number_str)?;
+            validate_no_leading_zero(right_number_str)?;
             (
                 left_number_str.parse().or(Err(()))?,
                 right_number_str.parse().or(Err(()))?,
@@ -283,6 +293,7 @@ impl Payload {
                     multipath_index,
                     address_index,
                 };
+                // TODO: check that all keys are used.
                 let miniscript_expr = miniscript_expr.translate_pk(&mut translator)?;
                 let pkscript = miniscript_expr.encode();
                 Ok(Payload {
@@ -323,6 +334,17 @@ impl Payload {
             } => Self::from_multisig(
                 params,
                 multisig,
+                keypath[keypath.len() - 2],
+                keypath[keypath.len() - 1],
+            ),
+            pb::BtcScriptConfigWithKeypath {
+                script_config:
+                    Some(pb::BtcScriptConfig {
+                        config: Some(pb::btc_script_config::Config::Descriptor(descriptor)),
+                    }),
+                ..
+            } => Self::from_descriptor(
+                descriptor,
                 keypath[keypath.len() - 2],
                 keypath[keypath.len() - 1],
             ),
@@ -746,6 +768,8 @@ mod tests {
             Ok((50, 100, 101))
         );
 
+        assert!(parse_wallet_policy_pk("@00/**").is_err());
+        assert!(parse_wallet_policy_pk("@01/**").is_err());
         assert!(parse_wallet_policy_pk("@0").is_err());
         assert!(parse_wallet_policy_pk("@0/").is_err());
         assert!(parse_wallet_policy_pk("@0/*").is_err());
