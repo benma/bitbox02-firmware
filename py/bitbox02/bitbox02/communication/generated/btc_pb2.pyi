@@ -140,15 +140,22 @@ class BTCScriptConfig(google.protobuf.message.Message):
 
         DESCRIPTOR_FIELD_NUMBER: builtins.int
         KEYS_FIELD_NUMBER: builtins.int
+        OUR_KEY_INDEX_FIELD_NUMBER: builtins.int
         descriptor: typing.Text
         @property
         def keys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BTCScriptConfig.Descriptor.Key]: ...
+        our_key_index: builtins.int
+        """Index to the xpub of our keystore in keys. The keypath to it is provided via
+        BTCPubRequest/BTCSignInit.
+        """
+
         def __init__(self,
             *,
             descriptor: typing.Text = ...,
             keys: typing.Optional[typing.Iterable[global___BTCScriptConfig.Descriptor.Key]] = ...,
+            our_key_index: builtins.int = ...,
             ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["descriptor",b"descriptor","keys",b"keys"]) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["descriptor",b"descriptor","keys",b"keys","our_key_index",b"our_key_index"]) -> None: ...
 
     SIMPLE_TYPE_FIELD_NUMBER: builtins.int
     MULTISIG_FIELD_NUMBER: builtins.int

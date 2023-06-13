@@ -32,11 +32,13 @@ use super::{multisig, params::Params, script};
 
 use sha2::{Digest, Sha256};
 
-const HASH160_LEN: usize = 20;
-const SHA256_LEN: usize = 32;
+use util::bip32::HARDENED;
 
 use bitcoin::hashes::{hash160, ripemd160, sha256, Hash};
-use miniscript::hash256;
+use miniscript::{hash256, TranslatePk};
+
+const HASH160_LEN: usize = 20;
+const SHA256_LEN: usize = 32;
 
 #[derive(Hash, Clone, Ord, Eq, PartialOrd, PartialEq, Debug)]
 struct WalletPolicyPubkey {
@@ -126,6 +128,63 @@ pub struct Payload {
     pub output_type: BtcOutputType,
 }
 
+struct WalletPolicyPkTranslator<'a> {
+    keys: &'a [pb::btc_script_config::descriptor::Key],
+    multipath_index: u32,
+    address_index: u32,
+}
+
+fn parse_wallet_policy_pk(pk: &str) -> Result<(usize, u32, u32), ()> {
+    let (left, right) = pk.strip_prefix("@").ok_or(())?.split_once('/').ok_or(())?;
+    let (receive_index, change_index): (u32, u32) = match right {
+        "**" => (0, 1),
+        right => {
+            let (left_number_str, right_number_str) = right
+                .strip_prefix("<")
+                .ok_or(())?
+                .strip_suffix(">/*")
+                .ok_or(())?
+                .split_once(';')
+                .ok_or(())?;
+            (
+                left_number_str.parse().or(Err(()))?,
+                right_number_str.parse().or(Err(()))?,
+            )
+        }
+    };
+    if receive_index == change_index || receive_index >= HARDENED || change_index >= HARDENED {
+        return Err(());
+    }
+    Ok((left.parse().or(Err(()))?, receive_index, change_index))
+}
+
+impl<'a> miniscript::Translator<String, bitcoin::PublicKey, Error>
+    for WalletPolicyPkTranslator<'a>
+{
+    fn pk(&mut self, pk: &String) -> Result<bitcoin::PublicKey, Error> {
+        let (key_index, multipath_index_left, multipath_index_right) =
+            parse_wallet_policy_pk(&pk).or(Err(Error::InvalidInput))?;
+        match self.keys.get(key_index) {
+            Some(pb::btc_script_config::descriptor::Key {
+                key: Some(pb::btc_script_config::descriptor::key::Key::Xpub(ref xpub)),
+            }) => {
+                let xpub: crate::bip32::Xpub = xpub.into();
+                let multipath_index = match self.multipath_index {
+                    0 => multipath_index_left,
+                    1 => multipath_index_right,
+                    _ => return Err(Error::InvalidInput),
+                };
+                let xpub = xpub.derive(&[multipath_index, self.address_index])?;
+                Ok(bitcoin::PublicKey::from_slice(xpub.public_key()).or(Err(Error::Generic))?)
+            }
+            _ => Err(Error::InvalidInput),
+        }
+        //Ok(bitcoin::PublicKey { key: pk.clone() })
+    }
+
+    miniscript::translate_hash_fail!(String, bitcoin::PublicKey, Error);
+}
+
 impl Payload {
     pub fn from_simple(
         xpub_cache: &mut Bip32XpubCache,
@@ -212,13 +271,19 @@ impl Payload {
         match desc.as_bytes() {
             [b'w', b's', b'h', b'(', .., b')'] => {
                 let miniscript_expr: miniscript::miniscript::Miniscript<
-                    WalletPolicyPubkey,
+                    String,
                     miniscript::miniscript::Segwitv0,
                 > = miniscript::miniscript::Miniscript::from_str(&desc[4..desc.len() - 1])
                     .or(Err(Error::InvalidInput))?;
                 miniscript_expr
                     .sanity_check()
                     .or(Err(Error::InvalidInput))?;
+                let mut translator = WalletPolicyPkTranslator {
+                    keys: descriptor.keys.as_ref(),
+                    multipath_index,
+                    address_index,
+                };
+                let miniscript_expr = miniscript_expr.translate_pk(&mut translator)?;
                 let pkscript = miniscript_expr.encode();
                 Ok(Payload {
                     data: Sha256::digest(pkscript.as_bytes()).to_vec(),
@@ -375,7 +440,6 @@ mod tests {
     use super::*;
 
     use bitbox02::testing::mock_unlocked_using_mnemonic;
-    use util::bip32::HARDENED;
 
     #[test]
     fn test_address_from_payload() {
@@ -666,5 +730,33 @@ mod tests {
             .as_slice(),
             b"\x25\x0e\xc8\x02\xb6\xd3\xdb\x98\x42\xd1\xbd\xbe\x0e\xe4\x8d\x52\xf9\xa4\xb4\x6e\x60\xcb\xbb\xab\x3b\xcc\x4e\xe9\x15\x73\xfc\xe8"
         );
+    }
+
+    #[test]
+    fn test_parse_wallet_policy_pk() {
+        assert_eq!(parse_wallet_policy_pk("@0/**"), Ok((0, 0, 1)));
+        assert_eq!(parse_wallet_policy_pk("@1/**"), Ok((1, 0, 1)));
+        assert_eq!(parse_wallet_policy_pk("@100/**"), Ok((100, 0, 1)));
+
+        assert_eq!(parse_wallet_policy_pk("@0/<0;1>/*"), Ok((0, 0, 1)));
+        assert_eq!(parse_wallet_policy_pk("@0/<1;2>/*"), Ok((0, 1, 2)));
+        assert_eq!(parse_wallet_policy_pk("@0/<100;101>/*"), Ok((0, 100, 101)));
+        assert_eq!(
+            parse_wallet_policy_pk("@50/<100;101>/*"),
+            Ok((50, 100, 101))
+        );
+
+        assert!(parse_wallet_policy_pk("@0").is_err());
+        assert!(parse_wallet_policy_pk("@0/").is_err());
+        assert!(parse_wallet_policy_pk("@0/*").is_err());
+        assert!(parse_wallet_policy_pk("0/**").is_err());
+        assert!(parse_wallet_policy_pk("@-1/**").is_err());
+        assert!(parse_wallet_policy_pk("@0/<0;1>/*/*").is_err());
+        assert!(parse_wallet_policy_pk("@0/<0;1>").is_err());
+        assert!(parse_wallet_policy_pk("@0/<0;1>/").is_err());
+        assert!(parse_wallet_policy_pk("@0/<100;100>/*").is_err());
+        // 2147483648 = HARDENED offset.
+        assert!(parse_wallet_policy_pk("@0/<100;2147483648>/*").is_err());
+        assert!(parse_wallet_policy_pk("@0/<2147483648;100>/*").is_err());
     }
 }

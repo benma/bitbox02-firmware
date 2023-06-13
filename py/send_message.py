@@ -415,7 +415,16 @@ class SendMessage:
                     script_config=bitbox02.btc.BTCScriptConfig(
                         descriptor=bitbox02.btc.BTCScriptConfig.Descriptor(
                             #descriptor="wsh(pk(025dae9bbe2a03e4b4a4ff910f112f94958c5ad90c10ca7e81d5845785c4603f23))",
-                            descriptor="wsh(and_v(v:pk(025dae9bbe2a03e4b4a4ff910f112f94958c5ad90c10ca7e81d5845785c4603f23),pk(03d7ff038d3aa95b367740e9438fbae40023ea912f8d7e0fafcb5a5c122c7cb15e)))"
+                            descriptor="wsh(and_v(v:pk(@0/**),pk(@1/**)))",
+                            keys=[
+                                bitbox02.btc.BTCScriptConfig.Descriptor.Key(
+                                    xpub=util.parse_xpub("xpub6FEZ9Bv73h1vnE4TJG4QFj2RPXJhhsPbnXgFyH3ErLvpcZrDcynY65bhWga8PazWHLSLi23PoBhGcLcYW6JRiJ12zXZ9Aop4LbAqsS3gtcy"),
+                                ),
+                                bitbox02.btc.BTCScriptConfig.Descriptor.Key(
+                                    xpub=util.parse_xpub("xpub6Eq64jDihkRvLg91wnckeTFWDT5jzdoKwX24aL9MHY4pS49E9jH69zFRnHuJzZijQaLZs7t5jtUxUhywhXGtUzsCf5EjunnDUNhzJFqhowa"),
+                                ),
+                            ],
+                            our_key_index=0,
                         )
                     ),
                     display=True,
