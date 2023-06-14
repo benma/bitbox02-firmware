@@ -38,6 +38,16 @@ pub struct Keypath {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct KeyOriginInfo {
+    #[prost(bytes = "vec", tag = "1")]
+    pub root_fingerprint: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint32, repeated, tag = "2")]
+    pub keypath: ::prost::alloc::vec::Vec<u32>,
+    #[prost(message, optional, tag = "3")]
+    pub xpub: ::core::option::Option<XPub>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CheckBackupRequest {
     #[prost(bool, tag = "1")]
     pub silent: bool,
@@ -295,7 +305,7 @@ pub mod btc_script_config {
             #[derive(Clone, PartialEq, ::prost::Oneof)]
             pub enum Key {
                 #[prost(message, tag = "1")]
-                Xpub(super::super::super::XPub),
+                KeyOriginInfo(super::super::super::KeyOriginInfo),
             }
         }
     }

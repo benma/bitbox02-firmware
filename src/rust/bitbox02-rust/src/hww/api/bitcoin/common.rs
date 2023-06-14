@@ -34,63 +34,10 @@ use sha2::{Digest, Sha256};
 
 use util::bip32::HARDENED;
 
-use bitcoin::hashes::{hash160, ripemd160, sha256, Hash};
-use miniscript::{hash256, TranslatePk};
+use miniscript::TranslatePk;
 
 const HASH160_LEN: usize = 20;
 const SHA256_LEN: usize = 32;
-
-#[derive(Hash, Clone, Ord, Eq, PartialOrd, PartialEq, Debug)]
-struct WalletPolicyPubkey {
-    key: String,
-}
-
-impl core::fmt::Display for WalletPolicyPubkey {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.key)
-    }
-}
-
-impl FromStr for WalletPolicyPubkey {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(WalletPolicyPubkey { key: s.into() })
-    }
-}
-
-impl miniscript::MiniscriptKey for WalletPolicyPubkey {
-    type Sha256 = String; // specify hashes as string
-    type Hash256 = String;
-    type Ripemd160 = String;
-    type Hash160 = String;
-
-    fn num_der_paths(&self) -> usize {
-        0
-    }
-}
-
-impl miniscript::ToPublicKey for WalletPolicyPubkey {
-    fn to_public_key(&self) -> bitcoin::PublicKey {
-        bitcoin::PublicKey::from_str(&self.key).unwrap()
-    }
-
-    fn to_sha256(hash: &<Self as miniscript::MiniscriptKey>::Sha256) -> sha256::Hash {
-        panic!("todo")
-    }
-
-    fn to_hash256(hash: &<Self as miniscript::MiniscriptKey>::Hash256) -> hash256::Hash {
-        panic!("todo")
-    }
-
-    fn to_ripemd160(hash: &<Self as miniscript::MiniscriptKey>::Ripemd160) -> ripemd160::Hash {
-        panic!("todo")
-    }
-
-    fn to_hash160(hash: &<Self as miniscript::MiniscriptKey>::Hash160) -> hash160::Hash {
-        panic!("todo")
-    }
-}
 
 /// Converts a satoshi value to a string, suffixed with `unit`, e.g. 1234567890 -> "12.3456789 BTC".
 pub fn format_amount(
@@ -176,7 +123,12 @@ impl<'a> miniscript::Translator<String, bitcoin::PublicKey, Error>
             parse_wallet_policy_pk(&pk).or(Err(Error::InvalidInput))?;
         match self.keys.get(key_index) {
             Some(pb::btc_script_config::descriptor::Key {
-                key: Some(pb::btc_script_config::descriptor::key::Key::Xpub(ref xpub)),
+                key:
+                    Some(pb::btc_script_config::descriptor::key::Key::KeyOriginInfo(
+                        pb::KeyOriginInfo {
+                            xpub: Some(xpub), ..
+                        },
+                    )),
             }) => {
                 let xpub: crate::bip32::Xpub = xpub.into();
                 let multipath_index = match self.multipath_index {
@@ -285,14 +237,14 @@ impl Payload {
                     miniscript::miniscript::Segwitv0,
                 > = miniscript::miniscript::Miniscript::from_str(&desc[4..desc.len() - 1])
                     .or(Err(Error::InvalidInput))?;
-                miniscript_expr
-                    .sanity_check()
-                    .or(Err(Error::InvalidInput))?;
                 let mut translator = WalletPolicyPkTranslator {
                     keys: descriptor.keys.as_ref(),
                     multipath_index,
                     address_index,
                 };
+                miniscript_expr
+                    .sanity_check()
+                    .or(Err(Error::InvalidInput))?;
                 // TODO: check that all keys are used.
                 let miniscript_expr = miniscript_expr.translate_pk(&mut translator)?;
                 let pkscript = miniscript_expr.encode();

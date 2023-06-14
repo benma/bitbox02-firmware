@@ -383,10 +383,16 @@ class SendMessage:
                 descriptor="wsh(and_v(v:pk(@0/**),pk(@1/**)))",
                 keys=[
                     bitbox02.btc.BTCScriptConfig.Descriptor.Key(
-                        xpub=util.parse_xpub("xpub6FEZ9Bv73h1vnE4TJG4QFj2RPXJhhsPbnXgFyH3ErLvpcZrDcynY65bhWga8PazWHLSLi23PoBhGcLcYW6JRiJ12zXZ9Aop4LbAqsS3gtcy"),
+                        key_origin_info=bitbox02.common.KeyOriginInfo(
+                            root_fingerprint=b"abcd",
+                            keypath=[48 + HARDENED, 0 + HARDENED, 0 + HARDENED, 3 + HARDENED],
+                            xpub=util.parse_xpub("xpub6FEZ9Bv73h1vnE4TJG4QFj2RPXJhhsPbnXgFyH3ErLvpcZrDcynY65bhWga8PazWHLSLi23PoBhGcLcYW6JRiJ12zXZ9Aop4LbAqsS3gtcy"),
+                        ),
                     ),
                     bitbox02.btc.BTCScriptConfig.Descriptor.Key(
-                        xpub=util.parse_xpub("xpub6Eq64jDihkRvLg91wnckeTFWDT5jzdoKwX24aL9MHY4pS49E9jH69zFRnHuJzZijQaLZs7t5jtUxUhywhXGtUzsCf5EjunnDUNhzJFqhowa"),
+                        key_origin_info=bitbox02.common.KeyOriginInfo(
+                            xpub=util.parse_xpub("xpub6Eq64jDihkRvLg91wnckeTFWDT5jzdoKwX24aL9MHY4pS49E9jH69zFRnHuJzZijQaLZs7t5jtUxUhywhXGtUzsCf5EjunnDUNhzJFqhowa"),
+                        ),
                     ),
                 ],
                 our_key_index=0,

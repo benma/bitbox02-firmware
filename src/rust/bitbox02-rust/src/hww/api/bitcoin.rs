@@ -18,6 +18,7 @@ compile_error!("Bitcoin code is being compiled even though the app-bitcoin featu
 mod bip143;
 mod bip341;
 pub mod common;
+mod descriptors;
 pub mod keypath;
 mod multisig;
 pub mod params;
@@ -213,6 +214,16 @@ async fn address_descriptor(
 ) -> Result<Response, Error> {
     let coin_params = params::get(coin);
     let title = "Receive to";
+
+    descriptors::confirm(
+        title,
+        coin_params,
+        "TODO",
+        descriptor,
+        descriptors::Mode::Basic,
+    )
+    .await?;
+
     let address = common::Payload::from_descriptor(
         descriptor,
         keypath[keypath.len() - 2],

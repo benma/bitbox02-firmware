@@ -57,7 +57,7 @@ message BTCScriptConfig {
       // oneof to reserve potential alternatives for key origins (including root fingerprint and
       // keypath), plain pubkey, etc.
       oneof key {
-        XPub xpub = 1;
+        KeyOriginInfo key_origin_info = 1;
       }
     }
 

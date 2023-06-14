@@ -306,7 +306,7 @@ fn sighash_script(
         pb::BtcScriptConfigWithKeypath {
             script_config:
                 Some(pb::BtcScriptConfig {
-                    config: Some(pb::btc_script_config::Config::Descriptor(ref descriptor)),
+                    config: Some(pb::btc_script_config::Config::Descriptor(descriptor)),
                 }),
             ..
         } => Ok(common::Payload::from_descriptor(
@@ -416,16 +416,27 @@ async fn validate_script_configs(
     }
 
     // Then we get descriptors out of the way.
+
     if let [pb::BtcScriptConfigWithKeypath {
         script_config:
             Some(pb::BtcScriptConfig {
-                config: Some(pb::btc_script_config::Config::Descriptor(ref descriptor)),
+                config: Some(pb::btc_script_config::Config::Descriptor(descriptor)),
             }),
         keypath: _,
     }] = script_configs
     {
         let _ = common::Payload::from_descriptor(descriptor, 0, 0)?;
         // TODO check registration and keypath
+
+        super::descriptors::confirm(
+            "Spend from",
+            coin_params,
+            "TODO",
+            descriptor,
+            super::descriptors::Mode::Basic,
+        )
+        .await?;
+
         return Ok(());
     }
 
