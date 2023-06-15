@@ -37,13 +37,67 @@ fn check_enabled(coin: BtcCoin) -> Result<(), Error> {
     Ok(())
 }
 
+fn is_our_key(key: &pb::btc_script_config::descriptor::key::Key) -> Result<bool, ()> {
+    let our_root_fingerprint = crate::keystore::root_fingerprint()?;
+    match key {
+        pb::btc_script_config::descriptor::key::Key::KeyOriginInfo(pb::KeyOriginInfo {
+            root_fingerprint,
+            keypath,
+            xpub: Some(xpub),
+            ..
+        }) if root_fingerprint.as_slice() == our_root_fingerprint.as_slice() => {
+            let our_xpub = crate::keystore::get_xpub(keypath)?.serialize(None)?;
+            let maybe_our_xpub = bip32::Xpub::from(xpub).serialize(None)?;
+            Ok(our_xpub == maybe_our_xpub)
+        }
+        _ => Ok(false),
+    }
+}
+
 /// Validate checks that a descriptor config is valid:
 /// - At least one key is ours
-/// - All keys are used
+/// - No two keys are the same.
 /// - TOOD: document more
 pub fn validate(coin: BtcCoin, descriptor: &Descriptor) -> Result<(), Error> {
     check_enabled(coin)?;
+    // Check that all keys are provided (no empty elements in the list).
+    let keys: Vec<&pb::btc_script_config::descriptor::key::Key> = descriptor
+        .keys
+        .iter()
+        .map(|key| key.key.as_ref())
+        .collect::<Option<Vec<&pb::btc_script_config::descriptor::key::Key>>>()
+        .ok_or(Error::InvalidInput)?;
+
+    // Check that at least one key is ours.
+    let mut has_our_key = false;
+    for &key in keys.iter() {
+        if is_our_key(key)? {
+            has_our_key = true;
+            break;
+        }
+    }
+    if !has_our_key {
+        return Err(Error::InvalidInput);
+    }
+
+    // Check for duplicate xpubs.
+    // Extract all xpubs first.
+    let xpubs: Vec<&pb::XPub> = keys
+        .iter()
+        .filter_map(|key| match key {
+            pb::btc_script_config::descriptor::key::Key::KeyOriginInfo(pb::KeyOriginInfo {
+                xpub: Some(xpub),
+                ..
+            }) => Some(xpub),
+            _ => None,
+        })
+        .collect();
+    if (1..xpubs.len()).any(|i| xpubs[i..].contains(&xpubs[i - 1])) {
+        return Err(Error::InvalidInput);
+    }
+
     Payload::from_descriptor(descriptor, 0, 0)?;
+
     Ok(())
 }
 
@@ -102,7 +156,8 @@ pub async fn confirm(
 
     let num_keys = descriptor.keys.len();
     for (i, key) in descriptor.keys.iter().enumerate() {
-        let key_str = match key.key.as_ref().ok_or(Error::InvalidInput)? {
+        let key = key.key.as_ref().ok_or(Error::InvalidInput)?;
+        let key_str = match key {
             pb::btc_script_config::descriptor::key::Key::KeyOriginInfo(pb::KeyOriginInfo {
                 root_fingerprint,
                 keypath,
@@ -127,7 +182,7 @@ pub async fn confirm(
             _ => return Err(Error::InvalidInput),
         };
         confirm::confirm(&confirm::Params {
-            body: (if i == descriptor.our_key_index as usize {
+            body: (if is_our_key(key)? {
                 format!("Key {}/{} (this device): {}", i + 1, num_keys, key_str)
             } else {
                 format!("Key {}/{}: {}", i + 1, num_keys, key_str)

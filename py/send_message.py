@@ -378,15 +378,24 @@ class SendMessage:
         return multisig_config
 
     def _btc_descriptor_config(self, coin: "bitbox02.btc.BTCCoin.V") -> bitbox02.btc.BTCScriptConfig:
+        account_keypath = [48 + HARDENED, 0 + HARDENED, 0 + HARDENED, 3 + HARDENED]
+        our_xpub = self._device.btc_xpub(
+            keypath=account_keypath,
+            coin=coin,
+            xpub_type=bitbox02.btc.BTCPubRequest.XPUB,  # pylint: disable=no-member,
+            display=False,
+        )
+        our_root_fingerprint = self._device.root_fingerprint()
+
         descriptor_config =  bitbox02.btc.BTCScriptConfig(
             descriptor=bitbox02.btc.BTCScriptConfig.Descriptor(
                 descriptor="wsh(and_v(v:pk(@0/**),pk(@1/**)))",
                 keys=[
                     bitbox02.btc.BTCScriptConfig.Descriptor.Key(
                         key_origin_info=bitbox02.common.KeyOriginInfo(
-                            root_fingerprint=b"abcd",
-                            keypath=[48 + HARDENED, 0 + HARDENED, 0 + HARDENED, 3 + HARDENED],
-                            xpub=util.parse_xpub("xpub6FEZ9Bv73h1vnE4TJG4QFj2RPXJhhsPbnXgFyH3ErLvpcZrDcynY65bhWga8PazWHLSLi23PoBhGcLcYW6JRiJ12zXZ9Aop4LbAqsS3gtcy"),
+                            root_fingerprint=our_root_fingerprint,
+                            keypath=account_keypath,
+                            xpub=util.parse_xpub(our_xpub),
                         ),
                     ),
                     bitbox02.btc.BTCScriptConfig.Descriptor.Key(
@@ -395,7 +404,6 @@ class SendMessage:
                         ),
                     ),
                 ],
-                our_key_index=0,
             )
         )
 
@@ -640,20 +648,21 @@ class SendMessage:
     def _sign_btc_descriptor(self) -> None:
         # pylint: disable=no-member
         bip44_account: int = 0 + HARDENED
+        account_keypath = [48 + HARDENED, 0 + HARDENED, bip44_account, 3 + HARDENED]
         inputs, outputs = _btc_demo_inputs_outputs(bip44_account)
         for (i, inp) in enumerate(inputs):
-            inp["keypath"] = [123 + HARDENED, 0 + HARDENED, bip44_account, 0, i]
+            inp["keypath"] = account_keypath + [0, i]
             inp["script_config_index"] = 0
         assert isinstance(outputs[0], bitbox02.BTCOutputInternal)
-        outputs[0].keypath = [123 + HARDENED, 0 + HARDENED, bip44_account, 1, 0]
+        outputs[0].keypath = account_keypath + [1, 0]
 
-        coin = bitbox02.btc.BTC
+        coin = bitbox02.btc.TBTC
         sigs = self._device.btc_sign(
             coin,
             [
                 bitbox02.btc.BTCScriptConfigWithKeypath(
                     script_config=self._btc_descriptor_config(coin),
-                    keypath=[123 + HARDENED, 0 + HARDENED, bip44_account],
+                    keypath=account_keypath,
                 ),
             ],
             inputs=inputs,

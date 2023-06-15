@@ -215,7 +215,7 @@ fn validate_keypath(
                 .or(Err(Error::InvalidInput))?;
         }
         Some(pb::BtcScriptConfig {
-            config: Some(pb::btc_script_config::Config::Descriptor(ref descriptor)),
+            config: Some(pb::btc_script_config::Config::Descriptor(descriptor)),
         }) => {
             // TODO validate keypath
         }
@@ -426,12 +426,14 @@ async fn validate_script_configs(
     }] = script_configs
     {
         super::descriptors::validate(coin_params.coin, descriptor)?;
-        // TODO check registration and keypath
+        let name = super::descriptors::get_name(coin_params.coin, descriptor)?
+            .ok_or(Error::InvalidInput)?;
+        // TODO keypath
 
         super::descriptors::confirm(
             "Spend from",
             coin_params,
-            "TODO",
+            &name,
             descriptor,
             super::descriptors::Mode::Basic,
         )

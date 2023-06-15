@@ -63,9 +63,6 @@ message BTCScriptConfig {
 
     string descriptor = 1;
     repeated Key keys = 2;
-    // Index to the xpub of our keystore in keys. The keypath to it is provided via
-    // BTCPubRequest/BTCSignInit.
-    uint32 our_key_index = 3;
   }
 
   oneof config {

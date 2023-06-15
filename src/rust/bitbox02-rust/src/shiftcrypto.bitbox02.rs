@@ -282,10 +282,6 @@ pub mod btc_script_config {
         pub descriptor: ::prost::alloc::string::String,
         #[prost(message, repeated, tag = "2")]
         pub keys: ::prost::alloc::vec::Vec<descriptor::Key>,
-        /// Index to the xpub of our keystore in keys. The keypath to it is provided via
-        /// BTCPubRequest/BTCSignInit.
-        #[prost(uint32, tag = "3")]
-        pub our_key_index: u32,
     }
     /// Nested message and enum types in `Descriptor`.
     pub mod descriptor {

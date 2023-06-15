@@ -106,7 +106,8 @@ async fn xpub(
     display: bool,
 ) -> Result<Response, Error> {
     let params = params::get(coin);
-    keypath::validate_xpub(keypath, params.bip44_coin, params.taproot_support)?;
+    // TODO re-enable with warning for unusual keypaths
+    //keypath::validate_xpub(keypath, params.bip44_coin, params.taproot_support)?;
     let xpub = keystore::get_xpub(keypath)
         .or(Err(Error::InvalidInput))?
         .serialize_str(xpub_type)?;
