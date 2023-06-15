@@ -18,13 +18,34 @@ use super::Error;
 use pb::btc_script_config::Descriptor;
 use pb::BtcCoin;
 
+use super::common::Payload;
 use super::params::Params;
 
 use crate::bip32;
 use crate::workflow::confirm;
 
+use alloc::string::String;
 use alloc::vec::Vec;
+
 use sha2::{Digest, Sha256};
+
+// We only support Bitcoin testnet for now.
+fn check_enabled(coin: BtcCoin) -> Result<(), Error> {
+    if !matches!(coin, BtcCoin::Tbtc) {
+        return Err(Error::InvalidInput);
+    }
+    Ok(())
+}
+
+/// Validate checks that a descriptor config is valid:
+/// - At least one key is ours
+/// - All keys are used
+/// - TOOD: document more
+pub fn validate(coin: BtcCoin, descriptor: &Descriptor) -> Result<(), Error> {
+    check_enabled(coin)?;
+    Payload::from_descriptor(descriptor, 0, 0)?;
+    Ok(())
+}
 
 pub enum Mode {
     Basic,
@@ -152,4 +173,10 @@ pub fn get_hash(coin: BtcCoin, descriptor: &Descriptor) -> Result<Vec<u8>, ()> {
         hasher.update(&payload.data);
     }
     Ok(hasher.finalize().as_slice().into())
+}
+
+pub fn get_name(coin: BtcCoin, descriptor: &Descriptor) -> Result<Option<String>, ()> {
+    Ok(bitbox02::memory::multisig_get_by_hash(&get_hash(
+        coin, descriptor,
+    )?))
 }

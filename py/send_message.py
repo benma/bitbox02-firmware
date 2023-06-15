@@ -378,7 +378,7 @@ class SendMessage:
         return multisig_config
 
     def _btc_descriptor_config(self, coin: "bitbox02.btc.BTCCoin.V") -> bitbox02.btc.BTCScriptConfig:
-        return bitbox02.btc.BTCScriptConfig(
+        descriptor_config =  bitbox02.btc.BTCScriptConfig(
             descriptor=bitbox02.btc.BTCScriptConfig.Descriptor(
                 descriptor="wsh(and_v(v:pk(@0/**),pk(@1/**)))",
                 keys=[
@@ -398,6 +398,22 @@ class SendMessage:
                 our_key_index=0,
             )
         )
+
+        is_registered = self._device.btc_is_script_config_registered(
+            coin, descriptor_config, [],
+        )
+        if is_registered:
+            print("Descriptor account already registered on the device.")
+        else:
+            descriptor_name = input("Enter a name for the descriptor account: ").strip()
+            self._device.btc_register_script_config(
+                coin=coin,
+                script_config=descriptor_config,
+                keypath=[],
+                name=descriptor_name,
+            )
+
+        return descriptor_config
 
     def _btc_multisig_address(self) -> None:
         try:
@@ -422,13 +438,13 @@ class SendMessage:
 
     def _btc_descriptor_address(self) -> None:
         try:
-            coin = bitbox02.btc.BTC
+            coin = bitbox02.btc.TBTC
             print(
                 self._device.btc_address(
                     coin=coin,
                     keypath=[
                         48 + HARDENED,
-                        0 + HARDENED,
+                        1 + HARDENED,
                         0 + HARDENED,
                         2 + HARDENED,
                         1,

@@ -425,7 +425,7 @@ async fn validate_script_configs(
         keypath: _,
     }] = script_configs
     {
-        let _ = common::Payload::from_descriptor(descriptor, 0, 0)?;
+        super::descriptors::validate(coin_params.coin, descriptor)?;
         // TODO check registration and keypath
 
         super::descriptors::confirm(
@@ -558,6 +558,7 @@ async fn _process(request: &pb::BtcSignInitRequest) -> Result<Response, Error> {
     // Validate the coin.
     let coin = pb::BtcCoin::from_i32(request.coin).ok_or(Error::InvalidInput)?;
     let coin_params = super::params::get(coin);
+
     // Validate the format_unit.
     let format_unit = FormatUnit::from_i32(request.format_unit).ok_or(Error::InvalidInput)?;
     // Currently we do not support time-based nlocktime

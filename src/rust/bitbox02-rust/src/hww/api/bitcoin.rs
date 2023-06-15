@@ -212,17 +212,26 @@ async fn address_descriptor(
     keypath: &[u32],
     display: bool,
 ) -> Result<Response, Error> {
+    // Only Bitcoin testnet for now.
     let coin_params = params::get(coin);
-    let title = "Receive to";
 
-    descriptors::confirm(
-        title,
-        coin_params,
-        "TODO",
-        descriptor,
-        descriptors::Mode::Basic,
-    )
-    .await?;
+    descriptors::validate(coin, descriptor)?;
+    let name = match descriptors::get_name(coin, descriptor)? {
+        Some(name) => name,
+        None => return Err(Error::InvalidInput),
+    };
+
+    let title = "Receive to";
+    if display {
+        descriptors::confirm(
+            title,
+            coin_params,
+            &name,
+            descriptor,
+            descriptors::Mode::Basic,
+        )
+        .await?;
+    }
 
     let address = common::Payload::from_descriptor(
         descriptor,
