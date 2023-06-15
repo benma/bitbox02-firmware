@@ -16,11 +16,15 @@ use super::pb;
 use super::Error;
 
 use pb::btc_script_config::Descriptor;
+use pb::BtcCoin;
 
 use super::params::Params;
 
 use crate::bip32;
 use crate::workflow::confirm;
+
+use alloc::vec::Vec;
+use sha2::{Digest, Sha256};
 
 pub enum Mode {
     Basic,
@@ -116,4 +120,36 @@ pub async fn confirm(
         .await?;
     }
     Ok(())
+}
+
+/// Creates a hash of this descriptor config, useful for registration and identification.
+pub fn get_hash(coin: BtcCoin, descriptor: &Descriptor) -> Result<Vec<u8>, ()> {
+    let mut hasher = Sha256::new();
+    {
+        // 1. Type of registration: descriptor
+        hasher.update(&[0xff]);
+    }
+    {
+        // 2. coin
+        let byte: u8 = match coin {
+            BtcCoin::Btc => 0x00,
+            BtcCoin::Tbtc => 0x01,
+            BtcCoin::Ltc => 0x02,
+            BtcCoin::Tltc => 0x03,
+        };
+        hasher.update(byte.to_le_bytes());
+    }
+    let payload = super::common::Payload::from_descriptor(descriptor, 0, 0).or(Err(()))?;
+    {
+        // 3. adress type
+        let address_type: u32 = payload.output_type as _;
+        hasher.update(address_type.to_le_bytes());
+    }
+    {
+        // 4. payload of first address.
+        let len: u32 = payload.data.len() as _;
+        hasher.update(len.to_le_bytes());
+        hasher.update(&payload.data);
+    }
+    Ok(hasher.finalize().as_slice().into())
 }

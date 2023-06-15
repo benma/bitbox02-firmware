@@ -179,6 +179,8 @@ message BTCSignOutputRequest {
 message BTCScriptConfigRegistration {
   BTCCoin coin = 1;
   BTCScriptConfig script_config = 2;
+  // keypath is only used for the multisig registration.
+  // descriptors contain the keypath as part of the KeyOriginInfo.
   repeated uint32 keypath = 3;
 }
 

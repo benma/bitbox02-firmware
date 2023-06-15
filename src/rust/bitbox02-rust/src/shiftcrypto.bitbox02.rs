@@ -645,6 +645,8 @@ pub struct BtcScriptConfigRegistration {
     pub coin: i32,
     #[prost(message, optional, tag = "2")]
     pub script_config: ::core::option::Option<BtcScriptConfig>,
+    /// keypath is only used for the multisig registration.
+    /// descriptors contain the keypath as part of the KeyOriginInfo.
     #[prost(uint32, repeated, tag = "3")]
     pub keypath: ::prost::alloc::vec::Vec<u32>,
 }
