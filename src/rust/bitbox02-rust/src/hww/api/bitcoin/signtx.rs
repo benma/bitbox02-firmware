@@ -309,12 +309,11 @@ fn sighash_script(
                     config: Some(pb::btc_script_config::Config::Descriptor(descriptor)),
                 }),
             ..
-        } => Ok(common::Payload::from_descriptor(
+        } => Ok(super::descriptors::pkscript(
             descriptor,
             keypath[keypath.len() - 2],
             keypath[keypath.len() - 1],
-        )?
-        .data),
+        )?),
         _ => Err(Error::InvalidInput),
     }
 }

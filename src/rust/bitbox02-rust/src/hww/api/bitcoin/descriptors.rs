@@ -23,9 +23,14 @@ use super::params::Params;
 
 use crate::bip32;
 use crate::workflow::confirm;
+use util::bip32::HARDENED;
+
+use core::str::FromStr;
 
 use alloc::string::String;
 use alloc::vec::Vec;
+
+use miniscript::TranslatePk;
 
 use sha2::{Digest, Sha256};
 
@@ -96,7 +101,7 @@ pub fn validate(coin: BtcCoin, descriptor: &Descriptor) -> Result<(), Error> {
         return Err(Error::InvalidInput);
     }
 
-    Payload::from_descriptor(descriptor, 0, 0)?;
+    pkscript(descriptor, 0, 0)?;
 
     Ok(())
 }
@@ -215,17 +220,19 @@ pub fn get_hash(coin: BtcCoin, descriptor: &Descriptor) -> Result<Vec<u8>, ()> {
         };
         hasher.update(byte.to_le_bytes());
     }
-    let payload = super::common::Payload::from_descriptor(descriptor, 0, 0).or(Err(()))?;
+    // TODO decide if we want to hash the raw pkscript (subscript) or the hashed pkscript as it
+    // appears in the output.
+    let pkscript = pkscript(descriptor, 0, 0).or(Err(()))?;
     {
         // 3. adress type
-        let address_type: u32 = payload.output_type as _;
+        let address_type: u32 = pb::BtcOutputType::P2wsh as _;
         hasher.update(address_type.to_le_bytes());
     }
     {
-        // 4. payload of first address.
-        let len: u32 = payload.data.len() as _;
+        // 4. pkscript of first address.
+        let len: u32 = pkscript.len() as _;
         hasher.update(len.to_le_bytes());
-        hasher.update(&payload.data);
+        hasher.update(&pkscript);
     }
     Ok(hasher.finalize().as_slice().into())
 }
@@ -234,4 +241,104 @@ pub fn get_name(coin: BtcCoin, descriptor: &Descriptor) -> Result<Option<String>
     Ok(bitbox02::memory::multisig_get_by_hash(&get_hash(
         coin, descriptor,
     )?))
+}
+
+struct WalletPolicyPkTranslator<'a> {
+    keys: &'a [pb::btc_script_config::descriptor::Key],
+    multipath_index: u32,
+    address_index: u32,
+}
+
+impl<'a> miniscript::Translator<String, bitcoin::PublicKey, Error>
+    for WalletPolicyPkTranslator<'a>
+{
+    fn pk(&mut self, pk: &String) -> Result<bitcoin::PublicKey, Error> {
+        let (key_index, multipath_index_left, multipath_index_right) =
+            parse_wallet_policy_pk(&pk).or(Err(Error::InvalidInput))?;
+        match self.keys.get(key_index) {
+            Some(pb::btc_script_config::descriptor::Key {
+                key:
+                    Some(pb::btc_script_config::descriptor::key::Key::KeyOriginInfo(
+                        pb::KeyOriginInfo {
+                            xpub: Some(xpub), ..
+                        },
+                    )),
+            }) => {
+                let xpub: crate::bip32::Xpub = xpub.into();
+                let multipath_index = match self.multipath_index {
+                    0 => multipath_index_left,
+                    1 => multipath_index_right,
+                    _ => return Err(Error::InvalidInput),
+                };
+                let xpub = xpub.derive(&[multipath_index, self.address_index])?;
+                Ok(bitcoin::PublicKey::from_slice(xpub.public_key()).or(Err(Error::Generic))?)
+            }
+            _ => Err(Error::InvalidInput),
+        }
+    }
+
+    miniscript::translate_hash_fail!(String, bitcoin::PublicKey, Error);
+}
+
+fn parse_wallet_policy_pk(pk: &str) -> Result<(usize, u32, u32), ()> {
+    fn validate_no_leading_zero(num: &str) -> Result<(), ()> {
+        if num.len() > 1 && num.starts_with('0') {
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
+    let (left, right) = pk.strip_prefix("@").ok_or(())?.split_once('/').ok_or(())?;
+    validate_no_leading_zero(left)?;
+    let (receive_index, change_index): (u32, u32) = match right {
+        "**" => (0, 1),
+        right => {
+            let (left_number_str, right_number_str) = right
+                .strip_prefix("<")
+                .ok_or(())?
+                .strip_suffix(">/*")
+                .ok_or(())?
+                .split_once(';')
+                .ok_or(())?;
+            validate_no_leading_zero(left_number_str)?;
+            validate_no_leading_zero(right_number_str)?;
+            (
+                left_number_str.parse().or(Err(()))?,
+                right_number_str.parse().or(Err(()))?,
+            )
+        }
+    };
+    if receive_index == change_index || receive_index >= HARDENED || change_index >= HARDENED {
+        return Err(());
+    }
+    Ok((left.parse().or(Err(()))?, receive_index, change_index))
+}
+
+pub fn pkscript(
+    descriptor: &Descriptor,
+    multipath_index: u32,
+    address_index: u32,
+) -> Result<Vec<u8>, Error> {
+    let desc = descriptor.descriptor.as_str();
+    match desc.as_bytes() {
+        [b'w', b's', b'h', b'(', .., b')'] => {
+            let miniscript_expr: miniscript::miniscript::Miniscript<
+                String,
+                miniscript::miniscript::Segwitv0,
+            > = miniscript::miniscript::Miniscript::from_str(&desc[4..desc.len() - 1])
+                .or(Err(Error::InvalidInput))?;
+            let mut translator = WalletPolicyPkTranslator {
+                keys: descriptor.keys.as_ref(),
+                multipath_index,
+                address_index,
+            };
+            miniscript_expr
+                .sanity_check()
+                .or(Err(Error::InvalidInput))?;
+            // TODO: check that all keys are used.
+            let miniscript_expr = miniscript_expr.translate_pk(&mut translator)?;
+            Ok(miniscript_expr.encode().as_bytes().to_vec())
+        }
+        _ => Err(Error::InvalidInput),
+    }
 }

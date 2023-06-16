@@ -17,8 +17,6 @@ use super::Error;
 
 use crate::xpubcache::Bip32XpubCache;
 
-use core::str::FromStr;
-
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -31,10 +29,6 @@ pub use pb::{BtcCoin, BtcOutputType};
 use super::{multisig, params::Params, script};
 
 use sha2::{Digest, Sha256};
-
-use util::bip32::HARDENED;
-
-use miniscript::TranslatePk;
 
 const HASH160_LEN: usize = 20;
 const SHA256_LEN: usize = 32;
@@ -73,78 +67,6 @@ pub fn format_amount(
 pub struct Payload {
     pub data: Vec<u8>,
     pub output_type: BtcOutputType,
-}
-
-struct WalletPolicyPkTranslator<'a> {
-    keys: &'a [pb::btc_script_config::descriptor::Key],
-    multipath_index: u32,
-    address_index: u32,
-}
-
-fn parse_wallet_policy_pk(pk: &str) -> Result<(usize, u32, u32), ()> {
-    fn validate_no_leading_zero(num: &str) -> Result<(), ()> {
-        if num.len() > 1 && num.starts_with('0') {
-            Err(())
-        } else {
-            Ok(())
-        }
-    }
-    let (left, right) = pk.strip_prefix("@").ok_or(())?.split_once('/').ok_or(())?;
-    validate_no_leading_zero(left)?;
-    let (receive_index, change_index): (u32, u32) = match right {
-        "**" => (0, 1),
-        right => {
-            let (left_number_str, right_number_str) = right
-                .strip_prefix("<")
-                .ok_or(())?
-                .strip_suffix(">/*")
-                .ok_or(())?
-                .split_once(';')
-                .ok_or(())?;
-            validate_no_leading_zero(left_number_str)?;
-            validate_no_leading_zero(right_number_str)?;
-            (
-                left_number_str.parse().or(Err(()))?,
-                right_number_str.parse().or(Err(()))?,
-            )
-        }
-    };
-    if receive_index == change_index || receive_index >= HARDENED || change_index >= HARDENED {
-        return Err(());
-    }
-    Ok((left.parse().or(Err(()))?, receive_index, change_index))
-}
-
-impl<'a> miniscript::Translator<String, bitcoin::PublicKey, Error>
-    for WalletPolicyPkTranslator<'a>
-{
-    fn pk(&mut self, pk: &String) -> Result<bitcoin::PublicKey, Error> {
-        let (key_index, multipath_index_left, multipath_index_right) =
-            parse_wallet_policy_pk(&pk).or(Err(Error::InvalidInput))?;
-        match self.keys.get(key_index) {
-            Some(pb::btc_script_config::descriptor::Key {
-                key:
-                    Some(pb::btc_script_config::descriptor::key::Key::KeyOriginInfo(
-                        pb::KeyOriginInfo {
-                            xpub: Some(xpub), ..
-                        },
-                    )),
-            }) => {
-                let xpub: crate::bip32::Xpub = xpub.into();
-                let multipath_index = match self.multipath_index {
-                    0 => multipath_index_left,
-                    1 => multipath_index_right,
-                    _ => return Err(Error::InvalidInput),
-                };
-                let xpub = xpub.derive(&[multipath_index, self.address_index])?;
-                Ok(bitcoin::PublicKey::from_slice(xpub.public_key()).or(Err(Error::Generic))?)
-            }
-            _ => Err(Error::InvalidInput),
-        }
-        //Ok(bitcoin::PublicKey { key: pk.clone() })
-    }
-
-    miniscript::translate_hash_fail!(String, bitcoin::PublicKey, Error);
 }
 
 impl Payload {
@@ -229,32 +151,11 @@ impl Payload {
         multipath_index: u32,
         address_index: u32,
     ) -> Result<Self, Error> {
-        let desc = descriptor.descriptor.as_str();
-        match desc.as_bytes() {
-            [b'w', b's', b'h', b'(', .., b')'] => {
-                let miniscript_expr: miniscript::miniscript::Miniscript<
-                    String,
-                    miniscript::miniscript::Segwitv0,
-                > = miniscript::miniscript::Miniscript::from_str(&desc[4..desc.len() - 1])
-                    .or(Err(Error::InvalidInput))?;
-                let mut translator = WalletPolicyPkTranslator {
-                    keys: descriptor.keys.as_ref(),
-                    multipath_index,
-                    address_index,
-                };
-                miniscript_expr
-                    .sanity_check()
-                    .or(Err(Error::InvalidInput))?;
-                // TODO: check that all keys are used.
-                let miniscript_expr = miniscript_expr.translate_pk(&mut translator)?;
-                let pkscript = miniscript_expr.encode();
-                Ok(Payload {
-                    data: Sha256::digest(pkscript.as_bytes()).to_vec(),
-                    output_type: BtcOutputType::P2wsh,
-                })
-            }
-            _ => Err(Error::InvalidInput),
-        }
+        let pkscript = super::descriptors::pkscript(descriptor, multipath_index, address_index)?;
+        Ok(Payload {
+            data: Sha256::digest(&pkscript).to_vec(),
+            output_type: BtcOutputType::P2wsh,
+        })
     }
 
     /// Computes the payload data from a script config. The payload can then be used generate a
