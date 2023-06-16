@@ -16,9 +16,8 @@ use super::pb;
 use super::Error;
 
 use pb::btc_script_config::Descriptor;
-use pb::BtcCoin;
+pub use pb::{BtcCoin, BtcOutputType};
 
-use super::common::Payload;
 use super::params::Params;
 
 use crate::bip32;
@@ -101,7 +100,7 @@ pub fn validate(coin: BtcCoin, descriptor: &Descriptor) -> Result<(), Error> {
         return Err(Error::InvalidInput);
     }
 
-    pkscript(descriptor, 0, 0)?;
+    parse(descriptor, 0, 0)?;
 
     Ok(())
 }
@@ -152,6 +151,7 @@ pub async fn confirm(
     }
 
     confirm::confirm(&confirm::Params {
+        title,
         body: &descriptor.descriptor,
         scrollable: true,
         accept_is_nextarrow: true,
@@ -187,10 +187,11 @@ pub async fn confirm(
             _ => return Err(Error::InvalidInput),
         };
         confirm::confirm(&confirm::Params {
+            title: &format!("Key {}/{}", i + 1, num_keys),
             body: (if is_our_key(key)? {
-                format!("Key {}/{} (this device): {}", i + 1, num_keys, key_str)
+                format!("This device: {}", key_str)
             } else {
-                format!("Key {}/{}: {}", i + 1, num_keys, key_str)
+                key_str
             })
             .as_str(),
             scrollable: true,
@@ -220,19 +221,18 @@ pub fn get_hash(coin: BtcCoin, descriptor: &Descriptor) -> Result<Vec<u8>, ()> {
         };
         hasher.update(byte.to_le_bytes());
     }
-    // TODO decide if we want to hash the raw pkscript (subscript) or the hashed pkscript as it
-    // appears in the output.
-    let pkscript = pkscript(descriptor, 0, 0).or(Err(()))?;
+    // TODO: also hash `parse(descriptor, 1, 0)` to cover all multipaths
+    let parse_result = parse(descriptor, 0, 0).or(Err(()))?;
     {
         // 3. adress type
-        let address_type: u32 = pb::BtcOutputType::P2wsh as _;
+        let address_type: u32 = parse_result.output_type as _;
         hasher.update(address_type.to_le_bytes());
     }
     {
         // 4. pkscript of first address.
-        let len: u32 = pkscript.len() as _;
+        let len: u32 = parse_result.pkscript.len() as _;
         hasher.update(len.to_le_bytes());
-        hasher.update(&pkscript);
+        hasher.update(&parse_result.pkscript);
     }
     Ok(hasher.finalize().as_slice().into())
 }
@@ -314,19 +314,22 @@ fn parse_wallet_policy_pk(pk: &str) -> Result<(usize, u32, u32), ()> {
     Ok((left.parse().or(Err(()))?, receive_index, change_index))
 }
 
-pub fn pkscript(
+pub struct ParseResult {
+    pub pkscript: Vec<u8>,
+    pub output_type: BtcOutputType,
+}
+
+pub fn parse(
     descriptor: &Descriptor,
     multipath_index: u32,
     address_index: u32,
-) -> Result<Vec<u8>, Error> {
+) -> Result<ParseResult, Error> {
     let desc = descriptor.descriptor.as_str();
     match desc.as_bytes() {
         [b'w', b's', b'h', b'(', .., b')'] => {
-            let miniscript_expr: miniscript::miniscript::Miniscript<
-                String,
-                miniscript::miniscript::Segwitv0,
-            > = miniscript::miniscript::Miniscript::from_str(&desc[4..desc.len() - 1])
-                .or(Err(Error::InvalidInput))?;
+            let miniscript_expr: miniscript::Miniscript<String, miniscript::Segwitv0> =
+                miniscript::Miniscript::from_str(&desc[4..desc.len() - 1])
+                    .or(Err(Error::InvalidInput))?;
             let mut translator = WalletPolicyPkTranslator {
                 keys: descriptor.keys.as_ref(),
                 multipath_index,
@@ -337,7 +340,10 @@ pub fn pkscript(
                 .or(Err(Error::InvalidInput))?;
             // TODO: check that all keys are used.
             let miniscript_expr = miniscript_expr.translate_pk(&mut translator)?;
-            Ok(miniscript_expr.encode().as_bytes().to_vec())
+            Ok(ParseResult {
+                pkscript: miniscript_expr.encode().as_bytes().to_vec(),
+                output_type: BtcOutputType::P2wsh,
+            })
         }
         _ => Err(Error::InvalidInput),
     }

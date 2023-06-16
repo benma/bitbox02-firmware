@@ -309,11 +309,17 @@ fn sighash_script(
                     config: Some(pb::btc_script_config::Config::Descriptor(descriptor)),
                 }),
             ..
-        } => Ok(super::descriptors::pkscript(
-            descriptor,
-            keypath[keypath.len() - 2],
-            keypath[keypath.len() - 1],
-        )?),
+        } => {
+            let result = super::descriptors::parse(
+                descriptor,
+                keypath[keypath.len() - 2],
+                keypath[keypath.len() - 1],
+            )?;
+            match result.output_type {
+                pb::BtcOutputType::P2wsh => Ok(result.pkscript),
+                _ => Err(Error::InvalidInput),
+            }
+        }
         _ => Err(Error::InvalidInput),
     }
 }

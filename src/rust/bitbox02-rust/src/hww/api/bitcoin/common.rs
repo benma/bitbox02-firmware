@@ -151,10 +151,10 @@ impl Payload {
         multipath_index: u32,
         address_index: u32,
     ) -> Result<Self, Error> {
-        let pkscript = super::descriptors::pkscript(descriptor, multipath_index, address_index)?;
+        let result = super::descriptors::parse(descriptor, multipath_index, address_index)?;
         Ok(Payload {
-            data: Sha256::digest(&pkscript).to_vec(),
-            output_type: BtcOutputType::P2wsh,
+            data: Sha256::digest(&result.pkscript).to_vec(),
+            output_type: result.output_type,
         })
     }
 

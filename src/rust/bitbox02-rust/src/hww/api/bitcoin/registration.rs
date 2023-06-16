@@ -161,7 +161,7 @@ pub async fn process_register_script_config(
             let hash = super::descriptors::get_hash(coin, descriptor)?;
             match bitbox02::memory::multisig_set_by_hash(&hash, &name) {
                 Ok(()) => {
-                    status::status("Descriptor\nregistered", true).await;
+                    status::status("Policy\nregistered", true).await;
                     Ok(Response::Success(pb::BtcSuccess {}))
                 }
                 Err(bitbox02::memory::MemoryError::MEMORY_ERR_DUPLICATE_NAME) => {
