@@ -73,13 +73,14 @@ pub fn validate(coin: BtcCoin, descriptor: &Descriptor) -> Result<(), Error> {
         .ok_or(Error::InvalidInput)?;
 
     // Check that at least one key is ours.
-    let mut has_our_key = false;
-    for &key in keys.iter() {
-        if is_our_key(key)? {
-            has_our_key = true;
-            break;
+    let has_our_key = 'block: {
+        for &key in keys.iter() {
+            if is_our_key(key)? {
+                break 'block true;
+            }
         }
-    }
+        false
+    };
     if !has_our_key {
         return Err(Error::InvalidInput);
     }
@@ -204,6 +205,23 @@ pub async fn confirm(
     Ok(())
 }
 
+fn hash_key(key: &pb::btc_script_config::descriptor::Key) -> Result<Vec<u8>, ()> {
+    let mut hasher = Sha256::new();
+    match key.key.as_ref() {
+        Some(pb::btc_script_config::descriptor::key::Key::KeyOriginInfo(pb::KeyOriginInfo {
+            xpub: Some(xpub),
+            ..
+        })) => {
+            // hash key type in case we add other key types in the future.
+            let key_type: u8 = 0;
+            hasher.update(key_type.to_le_bytes());
+            hasher.update(&bip32::Xpub::from(xpub).serialize(None)?);
+        }
+        _ => return Err(()),
+    }
+    Ok(hasher.finalize().as_slice().into())
+}
+
 /// Creates a hash of this descriptor config, useful for registration and identification.
 pub fn get_hash(coin: BtcCoin, descriptor: &Descriptor) -> Result<Vec<u8>, ()> {
     let mut hasher = Sha256::new();
@@ -221,18 +239,24 @@ pub fn get_hash(coin: BtcCoin, descriptor: &Descriptor) -> Result<Vec<u8>, ()> {
         };
         hasher.update(byte.to_le_bytes());
     }
-    // TODO: also hash `parse(descriptor, 1, 0)` to cover all multipaths
-    let parse_result = parse(descriptor, 0, 0).or(Err(()))?;
     {
-        // 3. adress type
-        let address_type: u32 = parse_result.output_type as _;
-        hasher.update(address_type.to_le_bytes());
+        // 3. descriptor
+        let len: u32 = descriptor.descriptor.len() as _;
+        hasher.update(len.to_le_bytes());
+        hasher.update(descriptor.descriptor.as_bytes());
     }
     {
-        // 4. pkscript of first address.
-        let len: u32 = parse_result.pkscript.len() as _;
-        hasher.update(len.to_le_bytes());
-        hasher.update(&parse_result.pkscript);
+        // 4. keys
+        let num: u32 = descriptor.keys.len() as _;
+        hasher.update(num.to_le_bytes());
+        let keys_hashed: Vec<Vec<u8>> = descriptor
+            .keys
+            .iter()
+            .map(hash_key)
+            .collect::<Result<Vec<Vec<u8>>, ()>>()?;
+        for key_hash in keys_hashed.iter() {
+            hasher.update(key_hash);
+        }
     }
     Ok(hasher.finalize().as_slice().into())
 }
@@ -288,13 +312,13 @@ fn parse_wallet_policy_pk(pk: &str) -> Result<(usize, u32, u32), ()> {
             Ok(())
         }
     }
-    let (left, right) = pk.strip_prefix("@").ok_or(())?.split_once('/').ok_or(())?;
+    let (left, right) = pk.strip_prefix('@').ok_or(())?.split_once('/').ok_or(())?;
     validate_no_leading_zero(left)?;
     let (receive_index, change_index): (u32, u32) = match right {
         "**" => (0, 1),
         right => {
             let (left_number_str, right_number_str) = right
-                .strip_prefix("<")
+                .strip_prefix('<')
                 .ok_or(())?
                 .strip_suffix(">/*")
                 .ok_or(())?
@@ -346,5 +370,40 @@ pub fn parse(
             })
         }
         _ => Err(Error::InvalidInput),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_wallet_policy_pk() {
+        assert_eq!(parse_wallet_policy_pk("@0/**"), Ok((0, 0, 1)));
+        assert_eq!(parse_wallet_policy_pk("@1/**"), Ok((1, 0, 1)));
+        assert_eq!(parse_wallet_policy_pk("@100/**"), Ok((100, 0, 1)));
+
+        assert_eq!(parse_wallet_policy_pk("@0/<0;1>/*"), Ok((0, 0, 1)));
+        assert_eq!(parse_wallet_policy_pk("@0/<1;2>/*"), Ok((0, 1, 2)));
+        assert_eq!(parse_wallet_policy_pk("@0/<100;101>/*"), Ok((0, 100, 101)));
+        assert_eq!(
+            parse_wallet_policy_pk("@50/<100;101>/*"),
+            Ok((50, 100, 101))
+        );
+
+        assert!(parse_wallet_policy_pk("@00/**").is_err());
+        assert!(parse_wallet_policy_pk("@01/**").is_err());
+        assert!(parse_wallet_policy_pk("@0").is_err());
+        assert!(parse_wallet_policy_pk("@0/").is_err());
+        assert!(parse_wallet_policy_pk("@0/*").is_err());
+        assert!(parse_wallet_policy_pk("0/**").is_err());
+        assert!(parse_wallet_policy_pk("@-1/**").is_err());
+        assert!(parse_wallet_policy_pk("@0/<0;1>/*/*").is_err());
+        assert!(parse_wallet_policy_pk("@0/<0;1>").is_err());
+        assert!(parse_wallet_policy_pk("@0/<0;1>/").is_err());
+        assert!(parse_wallet_policy_pk("@0/<100;100>/*").is_err());
+        // 2147483648 = HARDENED offset.
+        assert!(parse_wallet_policy_pk("@0/<100;2147483648>/*").is_err());
+        assert!(parse_wallet_policy_pk("@0/<2147483648;100>/*").is_err());
     }
 }

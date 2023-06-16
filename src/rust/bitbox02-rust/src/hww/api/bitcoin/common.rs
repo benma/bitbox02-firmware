@@ -315,6 +315,7 @@ mod tests {
     use super::*;
 
     use bitbox02::testing::mock_unlocked_using_mnemonic;
+    use util::bip32::HARDENED;
 
     #[test]
     fn test_address_from_payload() {
@@ -605,35 +606,5 @@ mod tests {
             .as_slice(),
             b"\x25\x0e\xc8\x02\xb6\xd3\xdb\x98\x42\xd1\xbd\xbe\x0e\xe4\x8d\x52\xf9\xa4\xb4\x6e\x60\xcb\xbb\xab\x3b\xcc\x4e\xe9\x15\x73\xfc\xe8"
         );
-    }
-
-    #[test]
-    fn test_parse_wallet_policy_pk() {
-        assert_eq!(parse_wallet_policy_pk("@0/**"), Ok((0, 0, 1)));
-        assert_eq!(parse_wallet_policy_pk("@1/**"), Ok((1, 0, 1)));
-        assert_eq!(parse_wallet_policy_pk("@100/**"), Ok((100, 0, 1)));
-
-        assert_eq!(parse_wallet_policy_pk("@0/<0;1>/*"), Ok((0, 0, 1)));
-        assert_eq!(parse_wallet_policy_pk("@0/<1;2>/*"), Ok((0, 1, 2)));
-        assert_eq!(parse_wallet_policy_pk("@0/<100;101>/*"), Ok((0, 100, 101)));
-        assert_eq!(
-            parse_wallet_policy_pk("@50/<100;101>/*"),
-            Ok((50, 100, 101))
-        );
-
-        assert!(parse_wallet_policy_pk("@00/**").is_err());
-        assert!(parse_wallet_policy_pk("@01/**").is_err());
-        assert!(parse_wallet_policy_pk("@0").is_err());
-        assert!(parse_wallet_policy_pk("@0/").is_err());
-        assert!(parse_wallet_policy_pk("@0/*").is_err());
-        assert!(parse_wallet_policy_pk("0/**").is_err());
-        assert!(parse_wallet_policy_pk("@-1/**").is_err());
-        assert!(parse_wallet_policy_pk("@0/<0;1>/*/*").is_err());
-        assert!(parse_wallet_policy_pk("@0/<0;1>").is_err());
-        assert!(parse_wallet_policy_pk("@0/<0;1>/").is_err());
-        assert!(parse_wallet_policy_pk("@0/<100;100>/*").is_err());
-        // 2147483648 = HARDENED offset.
-        assert!(parse_wallet_policy_pk("@0/<100;2147483648>/*").is_err());
-        assert!(parse_wallet_policy_pk("@0/<2147483648;100>/*").is_err());
     }
 }
