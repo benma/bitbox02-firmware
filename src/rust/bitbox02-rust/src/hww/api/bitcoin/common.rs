@@ -148,10 +148,9 @@ impl Payload {
 
     pub fn from_descriptor(
         descriptor: &pb::btc_script_config::Descriptor,
-        multipath_index: u32,
-        address_index: u32,
+        derive: super::descriptors::Derive,
     ) -> Result<Self, Error> {
-        let result = super::descriptors::parse(descriptor, multipath_index, address_index)?;
+        let result = super::descriptors::parse(descriptor, derive)?;
         Ok(Payload {
             data: Sha256::digest(&result.pkscript).to_vec(),
             output_type: result.output_type,
@@ -196,11 +195,7 @@ impl Payload {
                         config: Some(pb::btc_script_config::Config::Descriptor(descriptor)),
                     }),
                 ..
-            } => Self::from_descriptor(
-                descriptor,
-                keypath[keypath.len() - 2],
-                keypath[keypath.len() - 1],
-            ),
+            } => Self::from_descriptor(descriptor, super::descriptors::Derive::Keypath(keypath)),
             _ => Err(Error::InvalidInput),
         }
     }

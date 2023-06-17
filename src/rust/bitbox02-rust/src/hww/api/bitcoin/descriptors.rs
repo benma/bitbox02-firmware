@@ -101,10 +101,7 @@ pub fn validate(coin: BtcCoin, descriptor: &Descriptor) -> Result<(), Error> {
         return Err(Error::InvalidInput);
     }
 
-    // TODO: check for dup derived keys, e.g. @1/<0;1>/* and @1/<10;1> should fail because
-    // the change path overlaps.
-
-    parse(descriptor, 0, 0)?;
+    parse(descriptor, Derive::Direct(0, 0))?;
 
     Ok(())
 }
@@ -360,17 +357,72 @@ pub struct ParseResult {
     pub output_type: BtcOutputType,
 }
 
-pub fn parse(
-    descriptor: &Descriptor,
-    multipath_index: u32,
-    address_index: u32,
-) -> Result<ParseResult, Error> {
+// Provides two modes of derivations for the descriptor. Either directly using the multipath index
+// and address index, or a full keypath at one of our keys. See the docs in the variants for examples.
+pub enum Derive<'a> {
+    // Dervive descriptor using (multpath index, address index), where the multipath index can be 0
+    // or 1 (selecting between "<left;right>".
+    // Example: wsh(and_v(v:pk(@0/<10;11>/*),pk(@1/<20;21>/*))) derived using (0,5) derives:
+    // wsh(and_v(v:pk(@0/10/5),pk(@1/20/5))).
+    // The same derived usin (1,5) derives: wsh(and_v(v:pk(@0/11/5),pk(@1/21/5)))
+    Direct(u32, u32),
+    // Derive descriptor at the "keypath".
+    // Example: wsh(and_v(v:pk(@0/<10;11>/*),pk(@1/<20;21>/*))) with our key [fp/48'/1'/0'/3']xpub...]
+    // derived using keypath m/48'/1'/0'/3'/11/5 derives:
+    // wsh(and_v(v:pk(@0/11/5),pk(@1/21/5))).
+    Keypath(&'a [u32]),
+}
+
+fn get_multipath_and_address_index(
+    miniscript_expr: &miniscript::Miniscript<String, miniscript::Segwitv0>,
+    derivation: Derive,
+    keys: &[pb::btc_script_config::descriptor::Key],
+) -> Result<(u32, u32), Error> {
+    match derivation {
+        Derive::Direct(multipath_index, address_index) => Ok((multipath_index, address_index)),
+        Derive::Keypath(keypath) => {
+            for pk in miniscript_expr.iter_pk() {
+                let (key_index, multipath_index_left, multipath_index_right) =
+                    parse_wallet_policy_pk(&pk).or(Err(Error::InvalidInput))?;
+
+                match keys.get(key_index) {
+                    Some(pb::btc_script_config::descriptor::Key {
+                        key:
+                            Some(Key::KeyOriginInfo(pb::KeyOriginInfo {
+                                keypath: keypath_account,
+                                ..
+                            })),
+                    }) if keypath.starts_with(&keypath_account)
+                        && keypath.len() == keypath_account.len() + 2 =>
+                    {
+                        let keypath_change = keypath[keypath.len() - 2];
+                        let mp = if keypath_change == multipath_index_left {
+                            0
+                        } else if keypath_change == multipath_index_right {
+                            1
+                        } else {
+                            continue;
+                        };
+                        return Ok((mp, keypath[keypath.len() - 1]));
+                    }
+                    _ => continue,
+                }
+            }
+            Err(Error::InvalidInput)
+        }
+    }
+}
+
+pub fn parse(descriptor: &Descriptor, derivation: Derive) -> Result<ParseResult, Error> {
     let desc = descriptor.descriptor.as_str();
     match desc.as_bytes() {
         [b'w', b's', b'h', b'(', .., b')'] => {
             let miniscript_expr: miniscript::Miniscript<String, miniscript::Segwitv0> =
                 miniscript::Miniscript::from_str(&desc[4..desc.len() - 1])
                     .or(Err(Error::InvalidInput))?;
+
+            let (multipath_index, address_index) =
+                get_multipath_and_address_index(&miniscript_expr, derivation, &descriptor.keys)?;
             let mut translator = WalletPolicyPkTranslator {
                 keys: descriptor.keys.as_ref(),
                 seen: Vec::new(),
@@ -465,27 +517,100 @@ mod tests {
     }
 
     #[test]
+    fn test_get_multipath_and_address_index() {
+        let make_expr = |s: &str| miniscript::Miniscript::from_str(s).unwrap();
+
+        assert_eq!(
+            get_multipath_and_address_index(&make_expr("pk(@0/**)"), Derive::Direct(1, 12), &[]),
+            Ok((1, 12)),
+        );
+
+        let keypath_account = &[48 + HARDENED, 1 + HARDENED, 0 + HARDENED, 3 + HARDENED];
+        assert_eq!(
+            get_multipath_and_address_index(
+                &make_expr("and_v(v:pk(@0/**),pk(@1/**))"),
+                Derive::Keypath(&[
+                    48 + HARDENED,
+                    1 + HARDENED,
+                    0 + HARDENED,
+                    3 + HARDENED,
+                    0,
+                    12,
+                ]),
+                &[make_key(SOME_XPUB_1), make_our_key(keypath_account)]
+            ),
+            Ok((0, 12)),
+        );
+        assert_eq!(
+            get_multipath_and_address_index(
+                &make_expr("and_v(v:pk(@0/**),pk(@1/**))"),
+                Derive::Keypath(&[
+                    48 + HARDENED,
+                    1 + HARDENED,
+                    0 + HARDENED,
+                    3 + HARDENED,
+                    1,
+                    12,
+                ]),
+                &[make_key(SOME_XPUB_1), make_our_key(keypath_account)]
+            ),
+            Ok((1, 12)),
+        );
+
+        assert_eq!(
+            get_multipath_and_address_index(
+                &make_expr("and_v(v:pk(@0/**),pk(@1/<10;11>/*))"),
+                Derive::Keypath(&[
+                    48 + HARDENED,
+                    1 + HARDENED,
+                    0 + HARDENED,
+                    3 + HARDENED,
+                    10,
+                    12,
+                ]),
+                &[make_key(SOME_XPUB_1), make_our_key(keypath_account)]
+            ),
+            Ok((0, 12)),
+        );
+        assert_eq!(
+            get_multipath_and_address_index(
+                &make_expr("and_v(v:pk(@0/**),pk(@1/<10;11>/*))"),
+                Derive::Keypath(&[
+                    48 + HARDENED,
+                    1 + HARDENED,
+                    0 + HARDENED,
+                    3 + HARDENED,
+                    11,
+                    12,
+                ]),
+                &[make_key(SOME_XPUB_1), make_our_key(keypath_account)]
+            ),
+            Ok((1, 12)),
+        );
+    }
+
+    #[test]
     fn test_parse_check_dups_in_descriptor() {
         mock_unlocked();
         let keypath = &[48 + HARDENED, 1 + HARDENED, 0 + HARDENED, 3 + HARDENED];
 
         // Ok, one key.
         let desc = make_descriptor("wsh(pk(@0/**))", &[make_our_key(keypath)]);
-        assert!(parse(&desc, 0, 0).is_ok());
+        assert!(parse(&desc, Derive::Direct(0, 0)).is_ok());
 
         // Ok, two keys.
         let desc = make_descriptor(
             "wsh(or_b(pk(@0/**),s:pk(@1/**)))",
             &[make_our_key(keypath), make_key(SOME_XPUB_1)],
         );
-        assert!(parse(&desc, 0, 0).is_ok());
+        assert!(parse(&desc, Derive::Direct(0, 0)).is_ok());
 
         // Ok, one key with different derivations
         let desc = make_descriptor(
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<2;3>/*)))",
             &[make_our_key(keypath)],
         );
-        assert!(parse(&desc, 0, 0).is_ok());
+        assert!(parse(&desc, Derive::Direct(0, 0)).is_ok());
 
         // Duplicate path, one time in change, one time in receive. While the keys technically are
         // never duplicate in the final miniscript with the pubkeys inserted, we still prohibit, as
@@ -495,35 +620,35 @@ mod tests {
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<1;2>/*)))",
             &[make_our_key(keypath)],
         );
-        assert!(parse(&desc, 0, 0).is_ok());
+        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
 
         // Duplicate key inside descriptor.
         let desc = make_descriptor("wsh(or_b(pk(@0/**),s:pk(@0/**)))", &[make_our_key(keypath)]);
-        assert!(parse(&desc, 0, 0).is_err());
+        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
 
         // Duplicate key inside descriptor (same change and receive).
         let desc = make_descriptor("wsh(pk(@0/<0;0>/*))", &[make_our_key(keypath)]);
-        assert!(parse(&desc, 0, 0).is_err());
+        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
 
         // Duplicate key inside descriptor, using different notations for the same thing.
         let desc = make_descriptor(
             "wsh(or_b(pk(@0/**),s:pk(@0/<0;1>/*)))",
             &[make_our_key(keypath)],
         );
-        assert!(parse(&desc, 0, 0).is_err());
+        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
 
         // Duplicate key inside descriptor, using same receive but different change.
         let desc = make_descriptor(
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<0;2>/*)))",
             &[make_our_key(keypath)],
         );
-        assert!(parse(&desc, 0, 0).is_err());
+        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
 
         // Duplicate key inside descriptor, using same change but different receive.
         let desc = make_descriptor(
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<2;1>/*)))",
             &[make_our_key(keypath)],
         );
-        assert!(parse(&desc, 0, 0).is_err());
+        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
     }
 }

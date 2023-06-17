@@ -234,12 +234,9 @@ async fn address_descriptor(
         .await?;
     }
 
-    let address = common::Payload::from_descriptor(
-        descriptor,
-        keypath[keypath.len() - 2],
-        keypath[keypath.len() - 1],
-    )?
-    .address(coin_params)?;
+    let address =
+        common::Payload::from_descriptor(descriptor, descriptors::Derive::Keypath(keypath))?
+            .address(coin_params)?;
     if display {
         confirm::confirm(&confirm::Params {
             title,

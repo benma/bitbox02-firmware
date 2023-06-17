@@ -312,8 +312,7 @@ fn sighash_script(
         } => {
             let result = super::descriptors::parse(
                 descriptor,
-                keypath[keypath.len() - 2],
-                keypath[keypath.len() - 1],
+                super::descriptors::Derive::Keypath(keypath),
             )?;
             match result.output_type {
                 pb::BtcOutputType::P2wsh => Ok(result.pkscript),
