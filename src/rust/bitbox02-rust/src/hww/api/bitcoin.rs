@@ -216,7 +216,9 @@ async fn address_descriptor(
     // Only Bitcoin testnet for now.
     let coin_params = params::get(coin);
 
-    descriptors::validate(coin, descriptor)?;
+    let parsed = descriptors::parse(descriptor)?;
+    parsed.validate(coin)?;
+
     let name = match descriptors::get_name(coin, descriptor)? {
         Some(name) => name,
         None => return Err(Error::InvalidInput),
@@ -234,9 +236,8 @@ async fn address_descriptor(
         .await?;
     }
 
-    let address =
-        common::Payload::from_descriptor(descriptor, descriptors::Derive::Keypath(keypath))?
-            .address(coin_params)?;
+    let address = common::Payload::from_descriptor(&parsed, descriptors::Derive::Keypath(keypath))?
+        .address(coin_params)?;
     if display {
         confirm::confirm(&confirm::Params {
             title,

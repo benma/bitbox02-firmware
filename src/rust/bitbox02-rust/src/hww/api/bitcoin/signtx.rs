@@ -229,6 +229,7 @@ fn validate_keypath(
         return Err(Error::InvalidInput);
     }
     let change = keypath[keypath.len() - 2];
+    // TODO: change in descriptor must be determined using multipath
     if must_be_change && change != 1 {
         return Err(Error::InvalidInput);
     }
@@ -310,10 +311,8 @@ fn sighash_script(
                 }),
             ..
         } => {
-            let result = super::descriptors::parse(
-                descriptor,
-                super::descriptors::Derive::Keypath(keypath),
-            )?;
+            let result = super::descriptors::parse(descriptor)?
+                .pkscript(super::descriptors::Derive::Keypath(keypath))?;
             match result.output_type {
                 pb::BtcOutputType::P2wsh => Ok(result.pkscript),
                 _ => Err(Error::InvalidInput),
@@ -429,7 +428,7 @@ async fn validate_script_configs(
         keypath: _,
     }] = script_configs
     {
-        super::descriptors::validate(coin_params.coin, descriptor)?;
+        super::descriptors::parse(descriptor)?.validate(coin_params.coin)?;
         let name = super::descriptors::get_name(coin_params.coin, descriptor)?
             .ok_or(Error::InvalidInput)?;
         // TODO keypath

@@ -34,6 +34,9 @@ use miniscript::TranslatePk;
 
 use sha2::{Digest, Sha256};
 
+// Arbitrary limit of keys that can be present in a descriptor.
+const MAX_KEYS: usize = 20;
+
 // We only support Bitcoin testnet for now.
 fn check_enabled(coin: BtcCoin) -> Result<(), Error> {
     if !matches!(coin, BtcCoin::Tbtc) {
@@ -57,53 +60,6 @@ fn is_our_key(key: &Key) -> Result<bool, ()> {
         }
         _ => Ok(false),
     }
-}
-
-/// Validate checks that a descriptor config is valid:
-/// - At least one key is ours
-/// - No two keys are the same.
-/// - TOOD: document more
-pub fn validate(coin: BtcCoin, descriptor: &Descriptor) -> Result<(), Error> {
-    check_enabled(coin)?;
-    // Check that all keys are provided (no empty elements in the list).
-    let keys: Vec<&Key> = descriptor
-        .keys
-        .iter()
-        .map(|key| key.key.as_ref())
-        .collect::<Option<Vec<&Key>>>()
-        .ok_or(Error::InvalidInput)?;
-
-    // Check that at least one key is ours.
-    let has_our_key = 'block: {
-        for &key in keys.iter() {
-            if is_our_key(key)? {
-                break 'block true;
-            }
-        }
-        false
-    };
-    if !has_our_key {
-        return Err(Error::InvalidInput);
-    }
-
-    // Check for duplicate xpubs.
-    // Extract all xpubs first.
-    let xpubs: Vec<&pb::XPub> = keys
-        .iter()
-        .filter_map(|key| match key {
-            Key::KeyOriginInfo(pb::KeyOriginInfo {
-                xpub: Some(xpub), ..
-            }) => Some(xpub),
-            _ => None,
-        })
-        .collect();
-    if (1..xpubs.len()).any(|i| xpubs[i..].contains(&xpubs[i - 1])) {
-        return Err(Error::InvalidInput);
-    }
-
-    parse(descriptor, Derive::Direct(0, 0))?;
-
-    Ok(())
 }
 
 pub enum Mode {
@@ -397,34 +353,128 @@ fn get_multipath_and_address_index(
     }
 }
 
-/// Checks for duplicate keys.  Even though the rust-miniscript library checks for duplicate keys, it
-/// does so on the raw miniscript, which would not catch e.g. that
-/// `wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<2;1>/*)))` has a duplicate change derivation if we derive at
-/// the receive path.
-fn validate_duplicate_keys(
-    miniscript_expr: &miniscript::Miniscript<String, miniscript::Segwitv0>,
-) -> Result<(), Error> {
-    // in "@key_index/<left;right>", keeps track of (key_index,left) and (key_index,right) to check
-    // for duplicates.
-    let mut seen: Vec<(usize, u32)> = Vec::new();
-
-    for pk in miniscript_expr.iter_pk() {
-        let (key_index, multipath_index_left, multipath_index_right) =
-            parse_wallet_policy_pk(&pk).or(Err(Error::InvalidInput))?;
-
-        if seen.contains(&(key_index, multipath_index_left)) {
-            return Err(Error::InvalidInput);
-        }
-        seen.push((key_index, multipath_index_left));
-        if seen.contains(&(key_index, multipath_index_right)) {
-            return Err(Error::InvalidInput);
-        }
-        seen.push((key_index, multipath_index_right));
-    }
-    Ok(())
+pub struct ParsedDescriptor<'a> {
+    pub descriptor: &'a Descriptor,
+    pub miniscript_expr: miniscript::Miniscript<String, miniscript::Segwitv0>,
+    pub output_type: BtcOutputType,
 }
 
-pub fn parse(descriptor: &Descriptor, derivation: Derive) -> Result<ParseResult, Error> {
+impl<'a> ParsedDescriptor<'a> {
+    /// Check that it is impossible to create a derivation with duplicate pubkeys, assuming all the keys in the key vector are distinct.
+    ///
+    /// Even though the rust-miniscript library checks for duplicate keys, it does so on the raw
+    /// miniscript, which would not catch e.g. that `wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<2;1>/*)))` has
+    /// a duplicate change derivation if we derive at the receive path.
+    ///
+    /// Also checks that each key is used, e.g. if there are 3 keys in the key vector, @0, @1 and @2
+    /// must be present.
+    fn validate_keys(&self) -> Result<(), Error> {
+        // in "@key_index/<left;right>", keeps track of (key_index,left) and (key_index,right) to check
+        // for duplicates.
+        let mut derivations_seen: Vec<(usize, u32)> = Vec::new();
+
+        let mut keys_seen: Vec<bool> = vec![false; self.descriptor.keys.len()];
+
+        for pk in self.miniscript_expr.iter_pk() {
+            let (key_index, multipath_index_left, multipath_index_right) =
+                parse_wallet_policy_pk(&pk).or(Err(Error::InvalidInput))?;
+
+            if derivations_seen.contains(&(key_index, multipath_index_left)) {
+                return Err(Error::InvalidInput);
+            }
+            derivations_seen.push((key_index, multipath_index_left));
+            if derivations_seen.contains(&(key_index, multipath_index_right)) {
+                return Err(Error::InvalidInput);
+            }
+            derivations_seen.push((key_index, multipath_index_right));
+
+            *keys_seen.get_mut(key_index).ok_or(Error::InvalidInput)? = true;
+        }
+
+        if !keys_seen.into_iter().all(|b| b) {
+            return Err(Error::InvalidInput);
+        }
+        Ok(())
+    }
+
+    /// Validate checks that a descriptor config is valid:
+    /// - At least one key is ours
+    /// - No two keys are the same.
+    /// - TOOD: document more
+    pub fn validate(&self, coin: BtcCoin) -> Result<(), Error> {
+        check_enabled(coin)?;
+
+        // Already called as part from parsing miniscript using from_str.
+        // self.miniscript_expr
+        //     .sanity_check()
+        //     .or(Err(Error::InvalidInput))?;
+
+        // Check that all keys are provided (no empty elements in the list).
+        let keys: Vec<&Key> = self
+            .descriptor
+            .keys
+            .iter()
+            .map(|key| key.key.as_ref())
+            .collect::<Option<Vec<&Key>>>()
+            .ok_or(Error::InvalidInput)?;
+
+        if keys.len() > MAX_KEYS {
+            return Err(Error::InvalidInput);
+        }
+
+        self.validate_keys()?;
+
+        // Check that at least one key is ours.
+        let has_our_key = 'block: {
+            for &key in keys.iter() {
+                if is_our_key(key)? {
+                    break 'block true;
+                }
+            }
+            false
+        };
+        if !has_our_key {
+            return Err(Error::InvalidInput);
+        }
+
+        // Check for duplicate xpubs.
+        // Extract all xpubs first.
+        let xpubs: Vec<&pb::XPub> = keys
+            .iter()
+            .filter_map(|key| match key {
+                Key::KeyOriginInfo(pb::KeyOriginInfo {
+                    xpub: Some(xpub), ..
+                }) => Some(xpub),
+                _ => None,
+            })
+            .collect();
+        if (1..xpubs.len()).any(|i| xpubs[i..].contains(&xpubs[i - 1])) {
+            return Err(Error::InvalidInput);
+        }
+
+        Ok(())
+    }
+
+    pub fn pkscript(&self, derivation: Derive) -> Result<ParseResult, Error> {
+        let (multipath_index, address_index) = get_multipath_and_address_index(
+            &self.miniscript_expr,
+            derivation,
+            &self.descriptor.keys,
+        )?;
+        let mut translator = WalletPolicyPkTranslator {
+            keys: self.descriptor.keys.as_ref(),
+            multipath_index,
+            address_index,
+        };
+        let miniscript_expr = self.miniscript_expr.translate_pk(&mut translator)?;
+        Ok(ParseResult {
+            pkscript: miniscript_expr.encode().as_bytes().to_vec(),
+            output_type: self.output_type,
+        })
+    }
+}
+
+pub fn parse(descriptor: &Descriptor) -> Result<ParsedDescriptor, Error> {
     let desc = descriptor.descriptor.as_str();
     match desc.as_bytes() {
         [b'w', b's', b'h', b'(', .., b')'] => {
@@ -432,21 +482,9 @@ pub fn parse(descriptor: &Descriptor, derivation: Derive) -> Result<ParseResult,
                 miniscript::Miniscript::from_str(&desc[4..desc.len() - 1])
                     .or(Err(Error::InvalidInput))?;
 
-            validate_duplicate_keys(&miniscript_expr)?;
-            let (multipath_index, address_index) =
-                get_multipath_and_address_index(&miniscript_expr, derivation, &descriptor.keys)?;
-            let mut translator = WalletPolicyPkTranslator {
-                keys: descriptor.keys.as_ref(),
-                multipath_index,
-                address_index,
-            };
-            miniscript_expr
-                .sanity_check()
-                .or(Err(Error::InvalidInput))?;
-            // TODO: check that all keys are used.
-            let miniscript_expr = miniscript_expr.translate_pk(&mut translator)?;
-            Ok(ParseResult {
-                pkscript: miniscript_expr.encode().as_bytes().to_vec(),
+            Ok(ParsedDescriptor {
+                descriptor,
+                miniscript_expr,
                 output_type: BtcOutputType::P2wsh,
             })
         }
@@ -603,25 +641,26 @@ mod tests {
     #[test]
     fn test_parse_check_dups_in_descriptor() {
         mock_unlocked();
+        let coin = BtcCoin::Tbtc;
         let keypath = &[48 + HARDENED, 1 + HARDENED, 0 + HARDENED, 3 + HARDENED];
 
         // Ok, one key.
         let desc = make_descriptor("wsh(pk(@0/**))", &[make_our_key(keypath)]);
-        assert!(parse(&desc, Derive::Direct(0, 0)).is_ok());
+        assert!(parse(&desc).unwrap().validate(coin).is_ok());
 
         // Ok, two keys.
         let desc = make_descriptor(
             "wsh(or_b(pk(@0/**),s:pk(@1/**)))",
             &[make_our_key(keypath), make_key(SOME_XPUB_1)],
         );
-        assert!(parse(&desc, Derive::Direct(0, 0)).is_ok());
+        assert!(parse(&desc).unwrap().validate(coin).is_ok());
 
         // Ok, one key with different derivations
         let desc = make_descriptor(
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<2;3>/*)))",
             &[make_our_key(keypath)],
         );
-        assert!(parse(&desc, Derive::Direct(0, 0)).is_ok());
+        assert!(parse(&desc).unwrap().validate(coin).is_ok());
 
         // Duplicate path, one time in change, one time in receive. While the keys technically are
         // never duplicate in the final miniscript with the pubkeys inserted, we still prohibit, as
@@ -631,35 +670,35 @@ mod tests {
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<1;2>/*)))",
             &[make_our_key(keypath)],
         );
-        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
+        assert!(parse(&desc).unwrap().validate(coin).is_err());
 
         // Duplicate key inside descriptor.
         let desc = make_descriptor("wsh(or_b(pk(@0/**),s:pk(@0/**)))", &[make_our_key(keypath)]);
-        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
+        assert!(parse(&desc).is_err());
 
         // Duplicate key inside descriptor (same change and receive).
         let desc = make_descriptor("wsh(pk(@0/<0;0>/*))", &[make_our_key(keypath)]);
-        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
+        assert!(parse(&desc).unwrap().validate(coin).is_err());
 
         // Duplicate key inside descriptor, using different notations for the same thing.
         let desc = make_descriptor(
             "wsh(or_b(pk(@0/**),s:pk(@0/<0;1>/*)))",
             &[make_our_key(keypath)],
         );
-        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
+        assert!(parse(&desc).unwrap().validate(coin).is_err());
 
         // Duplicate key inside descriptor, using same receive but different change.
         let desc = make_descriptor(
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<0;2>/*)))",
             &[make_our_key(keypath)],
         );
-        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
+        assert!(parse(&desc).unwrap().validate(coin).is_err());
 
         // Duplicate key inside descriptor, using same change but different receive.
         let desc = make_descriptor(
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<2;1>/*)))",
             &[make_our_key(keypath)],
         );
-        assert!(parse(&desc, Derive::Direct(0, 0)).is_err());
+        assert!(parse(&desc).unwrap().validate(coin).is_err());
     }
 }

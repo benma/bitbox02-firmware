@@ -149,7 +149,7 @@ pub async fn process_register_script_config(
             let coin = BtcCoin::from_i32(*coin).ok_or(Error::InvalidInput)?;
             let coin_params = params::get(coin);
             let name = get_name(request).await?;
-            super::descriptors::validate(coin, descriptor)?;
+            super::descriptors::parse(descriptor)?.validate(coin)?;
             super::descriptors::confirm(
                 title,
                 coin_params,
