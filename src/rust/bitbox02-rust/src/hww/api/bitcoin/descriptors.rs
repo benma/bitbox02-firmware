@@ -268,9 +268,6 @@ pub fn get_name(coin: BtcCoin, descriptor: &Descriptor) -> Result<Option<String>
 
 struct WalletPolicyPkTranslator<'a> {
     keys: &'a [pb::btc_script_config::descriptor::Key],
-    // in "@key_index/<left;right>", keeps track of (key_index,left) and (key_index,right) to check
-    // for duplicates.
-    seen: Vec<(usize, u32)>,
     multipath_index: u32,
     address_index: u32,
 }
@@ -281,19 +278,6 @@ impl<'a> miniscript::Translator<String, bitcoin::PublicKey, Error>
     fn pk(&mut self, pk: &String) -> Result<bitcoin::PublicKey, Error> {
         let (key_index, multipath_index_left, multipath_index_right) =
             parse_wallet_policy_pk(&pk).or(Err(Error::InvalidInput))?;
-
-        // Check for duplicate keys.  Even though the rust-miniscript library checks for duplicate
-        // keys, it does so on the raw miniscript, which would not catch e.g. that
-        // `wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<2;1>/*)))` has a duplicate change derivation if we
-        // derive at the receive path.
-        if self.seen.contains(&(key_index, multipath_index_left)) {
-            return Err(Error::InvalidInput);
-        }
-        self.seen.push((key_index, multipath_index_left));
-        if self.seen.contains(&(key_index, multipath_index_right)) {
-            return Err(Error::InvalidInput);
-        }
-        self.seen.push((key_index, multipath_index_right));
 
         match self.keys.get(key_index) {
             Some(pb::btc_script_config::descriptor::Key {
@@ -413,6 +397,33 @@ fn get_multipath_and_address_index(
     }
 }
 
+/// Checks for duplicate keys.  Even though the rust-miniscript library checks for duplicate keys, it
+/// does so on the raw miniscript, which would not catch e.g. that
+/// `wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<2;1>/*)))` has a duplicate change derivation if we derive at
+/// the receive path.
+fn validate_duplicate_keys(
+    miniscript_expr: &miniscript::Miniscript<String, miniscript::Segwitv0>,
+) -> Result<(), Error> {
+    // in "@key_index/<left;right>", keeps track of (key_index,left) and (key_index,right) to check
+    // for duplicates.
+    let mut seen: Vec<(usize, u32)> = Vec::new();
+
+    for pk in miniscript_expr.iter_pk() {
+        let (key_index, multipath_index_left, multipath_index_right) =
+            parse_wallet_policy_pk(&pk).or(Err(Error::InvalidInput))?;
+
+        if seen.contains(&(key_index, multipath_index_left)) {
+            return Err(Error::InvalidInput);
+        }
+        seen.push((key_index, multipath_index_left));
+        if seen.contains(&(key_index, multipath_index_right)) {
+            return Err(Error::InvalidInput);
+        }
+        seen.push((key_index, multipath_index_right));
+    }
+    Ok(())
+}
+
 pub fn parse(descriptor: &Descriptor, derivation: Derive) -> Result<ParseResult, Error> {
     let desc = descriptor.descriptor.as_str();
     match desc.as_bytes() {
@@ -421,11 +432,11 @@ pub fn parse(descriptor: &Descriptor, derivation: Derive) -> Result<ParseResult,
                 miniscript::Miniscript::from_str(&desc[4..desc.len() - 1])
                     .or(Err(Error::InvalidInput))?;
 
+            validate_duplicate_keys(&miniscript_expr)?;
             let (multipath_index, address_index) =
                 get_multipath_and_address_index(&miniscript_expr, derivation, &descriptor.keys)?;
             let mut translator = WalletPolicyPkTranslator {
                 keys: descriptor.keys.as_ref(),
-                seen: Vec::new(),
                 multipath_index,
                 address_index,
             };
