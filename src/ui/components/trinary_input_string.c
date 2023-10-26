@@ -29,6 +29,7 @@
 #include <ui/ugui/ugui.h>
 #include <ui/ui_util.h>
 #include <util.h>
+#include <keystore.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -62,7 +63,7 @@ static const UG_FONT* _font = &font_password_11X12;
 
 typedef struct {
     // Can be NULL.
-    const char* const* wordlist;
+    const size_t* wordlist;
     size_t wordlist_size;
     // Only applies if wordlist != NULL: determines if a word from the wordlist was entered.
     bool can_confirm;
@@ -256,8 +257,13 @@ static void _maybe_autocomplete(component_t* trinary_input_string)
     // initial value means no word was found yet.
     size_t found_word_idx = data->wordlist_size;
     for (size_t word_idx = 0; word_idx < data->wordlist_size; word_idx++) {
-        const char* word = data->wordlist[word_idx];
+        char* word = NULL;
+        if (!keystore_get_bip39_word(data->wordlist[word_idx], &word)) {
+            Abort("bip39 word");
+            return;
+        }
         bool is_prefix = strncmp(data->string, word, data->string_index) == 0;
+        wally_free_string(word);
         if (is_prefix) {
             if (found_word_idx != data->wordlist_size) {
                 // Not unique.
@@ -266,8 +272,14 @@ static void _maybe_autocomplete(component_t* trinary_input_string)
             found_word_idx = word_idx;
         }
     }
+    char* word = NULL;
+    if (!keystore_get_bip39_word(data->wordlist[found_word_idx], &word)) {
+        Abort("bip39 word");
+        return;
+    }
     data->string_index =
-        snprintf(data->string, sizeof(data->string), "%s", data->wordlist[found_word_idx]);
+        snprintf(data->string, sizeof(data->string), "%s", word);
+    wally_free_string(word);
 }
 
 static void _set_alphabet(component_t* trinary_input_string)
@@ -281,7 +293,11 @@ static void _set_alphabet(component_t* trinary_input_string)
         // The wordlist is assumed to be sorted and only have 'a-z' characters.
         char charset[27] = {0};
         for (size_t word_idx = 0; word_idx < data->wordlist_size; word_idx++) {
-            const char* word = data->wordlist[word_idx];
+            char* word = NULL;
+            if (!keystore_get_bip39_word(data->wordlist[word_idx], &word)) {
+                Abort("bip39 word");
+                return;
+            }
             bool is_prefix = strncmp(data->string, word, data->string_index) == 0;
             if (is_prefix) {
                 if (strlen(word) > data->string_index) {
@@ -291,6 +307,7 @@ static void _set_alphabet(component_t* trinary_input_string)
                     }
                 }
             }
+            wally_free_string(word);
         }
         // Since wordlist is sorted, charset is sorted automatically.
         trinary_input_char_set_alphabet(trinary_char, charset, 1);
@@ -326,10 +343,17 @@ static void _set_can_confirm(component_t* trinary_input_string)
     data->can_confirm = false;
     // Can only confirm if the entered word matches a word in the wordlist.
     for (size_t i = 0; i < data->wordlist_size; i++) {
-        if (STREQ(data->wordlist[i], data->string)) {
-            data->can_confirm = true;
+        char* word = NULL;
+        if (!keystore_get_bip39_word(data->wordlist[i], &word)) {
+            Abort("bip39 word");
             return;
         }
+        if (STREQ(word, data->string)) {
+            data->can_confirm = true;
+            wally_free_string(word);
+            return;
+        }
+        wally_free_string(word);
     }
 }
 
@@ -507,12 +531,19 @@ void trinary_input_string_set_input(component_t* trinary_input_string, const cha
         return;
     }
     for (size_t i = 0; i < data->wordlist_size; i++) {
-        if (STREQ(data->wordlist[i], word)) {
+        char* bip39_word = NULL;
+        if (!keystore_get_bip39_word(data->wordlist[i], &bip39_word)) {
+            Abort("bip39 word");
+            return;
+        }
+        if (STREQ(bip39_word, word)) {
             data->string_index = snprintf(data->string, sizeof(data->string), "%s", word);
             _set_alphabet(trinary_input_string);
             _set_can_confirm(trinary_input_string);
+            wally_free_string(bip39_word);
             return;
         }
+        wally_free_string(bip39_word);
     }
     Abort("trinary_input_string_set_input");
 }

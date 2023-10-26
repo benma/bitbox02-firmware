@@ -24,8 +24,9 @@
 
 typedef struct {
     const char* title;
-    // Restrict and autocomplete to this list of words. Set to NULL to allow arbitrary input.
-    const char* const* wordlist;
+    // Restrict and autocomplete to this list of English bip39 words, referenced by index. Set to
+    // NULL to allow arbitrary input.
+    const size_t* const wordlist;
     // Set to 0 if wordlist is NULL.
     size_t wordlist_size;
     // Mask the chars entered as `*`. For password input.
