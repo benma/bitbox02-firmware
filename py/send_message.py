@@ -41,6 +41,7 @@ from bitbox02.communication import (
     FirmwareVersionOutdatedException,
     u2fhid,
     bitbox_api_protocol,
+    PhysicalLayer,
 )
 
 import u2f
@@ -1547,6 +1548,31 @@ class U2FApp:
         self._device.close()
         return 0
 
+def connect_to_simulator_bitbox(debug: bool) -> int:
+    class Simulator(PhysicalLayer):
+        def write(self, data: bytes) -> None:
+            raise Exception(f"TODO: write {data.hex()} to simulator")
+
+        def read(self, size: int, timeout_ms: int) -> bytes:
+            raise Exception(f"TODO: read {size} bytes from simulator")
+
+    simulator = Simulator()
+
+    device_info = {
+        "serial_number": "v9.15.0",
+        "path": "",
+        "product_string": "BitBox02BTC",
+    }
+    noise_config = bitbox_api_protocol.BitBoxNoiseConfig()
+    bitbox_connection = bitbox02.BitBox02(
+        transport=u2fhid.U2FHid(simulator), device_info=device_info, noise_config=noise_config,
+    )
+    try:
+        bitbox_connection.check_min_version()
+    except FirmwareVersionOutdatedException as exc:
+        print("WARNING: ", exc)
+
+    return SendMessage(bitbox_connection, debug).run()
 
 def connect_to_usb_bitbox(debug: bool, use_cache: bool) -> int:
     """
@@ -1635,6 +1661,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Tool for communicating with bitbox device")
     parser.add_argument("--debug", action="store_true", help="Print messages sent and received")
     parser.add_argument("--u2f", action="store_true", help="Use u2f menu instead")
+    parser.add_argument("--simulator", action="store_true", help="Connect to the BitBox02 simulator instead of a real BitBox02")
     parser.add_argument(
         "--no-cache", action="store_true", help="Don't use cached or store noise keys"
     )
@@ -1654,6 +1681,9 @@ def main() -> int:
             u2fapp = U2FApp(u2fdevice, args.debug)
             return u2fapp.run()
         return 1
+
+    if args.simulator:
+        return connect_to_simulator_bitbox(args.debug)
 
     return connect_to_usb_bitbox(args.debug, not args.no_cache)
 
