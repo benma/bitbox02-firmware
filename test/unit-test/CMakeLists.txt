@@ -16,7 +16,7 @@
 #-----------------------------------------------------------------------------
 # Build bitbox lib to use in tests
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-parameter -Wno-missing-prototypes -Wno-missing-declarations -Wno-implicit-function-declaration -Wno-bad-function-cast")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-parameter -Wno-missing-prototypes -Wno-missing-declarations -Wno-implicit-function-declaration -Wno-bad-function-cast -g -O0")
 
 set(DBB-FILTERED-SOURCES
   ${DBB-FIRMWARE-SOURCES}

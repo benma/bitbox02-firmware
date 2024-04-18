@@ -15,6 +15,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
+use hmac::{Hmac, Mac};
 use sha2::Digest;
 use sha2::Sha256;
 use util::c_types::{c_uchar, c_void};
@@ -57,6 +58,23 @@ pub unsafe extern "C" fn rust_sha256(data: *const c_void, len: usize, out: *mut 
     let data = core::slice::from_raw_parts(data as *const u8, len);
     let hash = Sha256::digest(data);
     out.copy_from_slice(&hash[..]);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rust_hmac_sha256(
+    key: *const c_void,
+    key_len: usize,
+    data: *const c_void,
+    data_len: usize,
+    out: *mut c_uchar,
+) {
+    let out = core::slice::from_raw_parts_mut(out, 32);
+    let key = core::slice::from_raw_parts(key as *const u8, key_len);
+    let data = core::slice::from_raw_parts(data as *const u8, data_len);
+
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).unwrap();
+    mac.update(data);
+    out.copy_from_slice(&mac.finalize_reset().into_bytes())
 }
 
 #[cfg(test)]

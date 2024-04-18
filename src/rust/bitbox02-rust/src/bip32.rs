@@ -16,6 +16,7 @@ use super::pb;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use bitcoin_hashes::{hash160, Hash};
 pub use pb::btc_pub_request::XPubType;
 
 #[derive(Clone)]
@@ -114,7 +115,9 @@ impl Xpub {
 
     /// Return the hash160 of the secp256k1 public key.
     pub fn pubkey_hash160(&self) -> Vec<u8> {
-        bitbox02::hash160(self.public_key()).to_vec()
+        hash160::Hash::hash(self.public_key())
+            .to_byte_array()
+            .to_vec()
     }
 
     /// Return the 65 byte secp256k1 compressed pubkey:

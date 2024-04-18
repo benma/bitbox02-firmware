@@ -78,9 +78,7 @@ USE_RESULT static keystore_error_t _stretch_retained_seed_encryption_key(
     if (!salt_hash_data(encryption_key, 32, purpose_out, salted_hashed)) {
         return KEYSTORE_ERR_SALT;
     }
-    if (wally_hmac_sha256(salted_hashed, sizeof(salted_hashed), out, 32, out, 32) != WALLY_OK) {
-        return KEYSTORE_ERR_HASH;
-    }
+    rust_hmac_sha256(salted_hashed, sizeof(salted_hashed), out, 32, out);
     return KEYSTORE_OK;
 }
 
@@ -215,11 +213,8 @@ static keystore_error_t _stretch_password(
             password_salted_hashed)) {
         return KEYSTORE_ERR_SALT;
     }
-    if (wally_hmac_sha256(
-            password_salted_hashed, sizeof(password_salted_hashed), kdf_out, 32, kdf_out, 32) !=
-        WALLY_OK) {
-        return KEYSTORE_ERR_HASH;
-    }
+    rust_hmac_sha256(
+        password_salted_hashed, sizeof(password_salted_hashed), kdf_out, 32, kdf_out);
 
     return KEYSTORE_OK;
 }
@@ -760,10 +755,7 @@ bool keystore_get_u2f_seed(uint8_t* seed_out)
         return false;
     }
     const uint8_t message[] = "u2f";
-    if (wally_hmac_sha256(bip39_seed, 64, message, sizeof(message), seed_out, SHA256_LEN) !=
-        WALLY_OK) {
-        return false;
-    }
+    rust_hmac_sha256(bip39_seed, 64, message, sizeof(message), seed_out);
     return true;
 }
 
@@ -795,11 +787,7 @@ bool keystore_get_ed25519_seed(uint8_t* seed_out)
     message[0] = 0x01;
     memcpy(&message[1], bip39_seed, 64);
     util_zero(bip39_seed, sizeof(bip39_seed));
-    if (wally_hmac_sha256(key, sizeof(key), message, sizeof(message), &seed_out[64], 32) !=
-        WALLY_OK) {
-        util_zero(message, sizeof(message));
-        return false;
-    }
+    rust_hmac_sha256(key, sizeof(key), message, sizeof(message), &seed_out[64]);
     util_zero(message, sizeof(message));
     return true;
 }

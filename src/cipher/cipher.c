@@ -21,6 +21,7 @@
 #include <random.h>
 #include <util.h>
 #include <wally_crypto.h>
+#include <rust/rust.h>
 
 #ifdef TESTING
 #include <mock_cipher.h>
@@ -112,13 +113,13 @@ bool cipher_aes_hmac_encrypt(
 
     *out_len = encrypt_len + 32;
 
-    return wally_hmac_sha256(
+    rust_hmac_sha256(
                authentication_key,
                sizeof(authentication_key),
                out,
                encrypt_len,
-               out + encrypt_len,
-               32) == WALLY_OK;
+               out + encrypt_len);
+    return true;
 }
 
 // necessary in_len/out_len range checks are done in cipher_aes_hmac_decrypt().
@@ -190,15 +191,12 @@ bool cipher_aes_hmac_decrypt(
 
     uint8_t hmac[32];
     UTIL_CLEANUP_32(hmac);
-    if (wally_hmac_sha256(
+    rust_hmac_sha256(
             authentication_key,
             sizeof(authentication_key),
             in,
             in_len - sizeof(hmac),
-            hmac,
-            sizeof(hmac)) != WALLY_OK) {
-        return false;
-    }
+            hmac);
 
     if (!MEMEQ(hmac, in + in_len - sizeof(hmac), sizeof(hmac))) {
         return false;
