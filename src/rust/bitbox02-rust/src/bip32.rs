@@ -18,6 +18,8 @@ use alloc::vec::Vec;
 
 pub use pb::btc_pub_request::XPubType;
 
+use bitcoin::key::TapTweak;
+
 #[derive(Clone)]
 pub struct Xpub {
     xpub: pb::XPub,
@@ -132,7 +134,13 @@ impl Xpub {
     /// See
     /// https://github.com/bitcoin/bips/blob/edffe529056f6dfd33d8f716fb871467c3c09263/bip-0086.mediawiki#address-derivation
     pub fn schnorr_bip86_pubkey(&self) -> Result<[u8; 32], ()> {
-        bitbox02::keystore::secp256k1_schnorr_bip86_pubkey(self.public_key())
+        let pk: bitcoin::key::UntweakedPublicKey =
+            bitcoin::PublicKey::from_slice(self.public_key())
+                .map_err(|_| ())?
+                .into();
+        let secp = bitcoin::secp256k1::Secp256k1::verification_only();
+        let (output_key, _) = pk.tap_tweak(&secp, None);
+        Ok(output_key.serialize())
     }
 }
 

@@ -357,7 +357,6 @@ add_custom_target(rust-bindgen
     --allowlist-function delay_us
     --rustified-enum keystore_error_t
     --rustified-enum keystore_secp256k1_pubkey_format
-    --allowlist-function keystore_secp256k1_schnorr_bip86_pubkey
     --allowlist-function util_format_datetime
     --allowlist-type buffer_t
     --allowlist-function delay_ms
