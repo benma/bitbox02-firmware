@@ -253,7 +253,8 @@ async fn address_policy(
         policies::confirm(title, coin_params, &name, policy, policies::Mode::Basic).await?;
     }
 
-    let address = common::Payload::from_policy(&parsed, keypath)?.address(coin_params)?;
+    let address =
+        common::Payload::from_policy(coin_params, &parsed, keypath)?.address(coin_params)?;
     if display {
         confirm::confirm(&confirm::Params {
             title,
