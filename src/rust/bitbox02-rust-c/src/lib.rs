@@ -34,6 +34,8 @@ mod noise;
 mod sha2;
 #[cfg(feature = "firmware")]
 mod workflow;
+#[cfg(feature = "firmware")]
+mod keystore;
 
 // Whenever execution reaches somewhere it isn't supposed to rust code will "panic". Our panic
 // handler will print the available information on the screen. If we compile with `panic=abort`

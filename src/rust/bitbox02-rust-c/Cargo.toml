@@ -85,6 +85,8 @@ app-ethereum = [
 ]
 
 app-bitcoin = [
+  # enable this dep
+  "bitcoin",
   # enable this feature in the deps
   "bitbox02-rust/app-bitcoin",
 ]

@@ -901,17 +901,6 @@ USE_RESULT bool keystore_encode_xpub_at_keypath(
            WALLY_OK;
 }
 
-static void _tagged_hash(const char* tag, const uint8_t* msg, size_t msg_len, uint8_t* hash_out)
-{
-    uint8_t tag_hash[32] = {0};
-    rust_sha256(tag, strlen(tag), tag_hash);
-    void* hash_ctx = rust_sha256_new();
-    rust_sha256_update(hash_ctx, tag_hash, sizeof(tag_hash));
-    rust_sha256_update(hash_ctx, tag_hash, sizeof(tag_hash));
-    rust_sha256_update(hash_ctx, msg, msg_len);
-    rust_sha256_finish(&hash_ctx, hash_out);
-}
-
 static bool _schnorr_bip86_keypair(
     const uint32_t* keypath,
     size_t keypath_len,
@@ -926,24 +915,20 @@ static bool _schnorr_bip86_keypair(
         return false;
     }
     const uint8_t* secret_key = xprv.priv_key + 1; // first byte is 0;
+    uint8_t tweaked_secret_key[32] = {0};
+    if (!rust_keystore_schnorr_bip86_tweak_private_key(
+        rust_util_bytes(secret_key, 32),
+        rust_util_bytes_mut(tweaked_secret_key, sizeof(tweaked_secret_key)))) {
+        return false;
+    }
     const secp256k1_context* ctx = wally_get_secp_context();
-    if (!secp256k1_keypair_create(ctx, keypair_out, secret_key)) {
+    if (!secp256k1_keypair_create(ctx, keypair_out, tweaked_secret_key)) {
         return false;
     }
     if (!secp256k1_keypair_xonly_pub(ctx, pubkey_out, NULL, keypair_out)) {
         return false;
     }
-    uint8_t pubkey_serialized[32] = {0};
-    if (!secp256k1_xonly_pubkey_serialize(ctx, pubkey_serialized, pubkey_out)) {
-        return false;
-    }
-    uint8_t hash[32] = {0};
-    _tagged_hash("TapTweak", pubkey_serialized, sizeof(pubkey_serialized), hash);
-
-    if (secp256k1_keypair_xonly_tweak_add(ctx, keypair_out, hash) != 1) {
-        return false;
-    }
-    return secp256k1_keypair_xonly_pub(ctx, pubkey_out, NULL, keypair_out) == 1;
+    return true;
 }
 
 static void _cleanup_keypair(secp256k1_keypair* keypair)
