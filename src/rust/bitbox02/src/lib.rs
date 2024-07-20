@@ -28,6 +28,8 @@ extern crate std;
 #[macro_use]
 extern crate alloc;
 
+use alloc::vec::Vec;
+
 use alloc::string::String;
 
 #[cfg(feature = "testing")]
@@ -266,6 +268,53 @@ pub fn sha512(msg: &[u8]) -> [u8; 64] {
         );
     }
     result
+}
+
+pub fn dleq_prove(sk: [u8; 32], gen2: [u8; 64], p1: [u8; 64], p2: [u8; 64]) -> Result<Vec<u8>, ()> {
+    let mut s = [0u8; 32];
+    let mut e = [0u8; 32];
+    let mut gen2 = bitbox02_sys::secp256k1_pubkey { data: gen2 };
+    let mut p1 = bitbox02_sys::secp256k1_pubkey { data: p1 };
+    let mut p2 = bitbox02_sys::secp256k1_pubkey { data: p2 };
+    let result = unsafe {
+        bitbox02_sys::foo_secp256k1_dleq_prove(
+            bitbox02_sys::wally_get_secp_context(),
+            s.as_mut_ptr(),
+            e.as_mut_ptr(),
+            sk.as_ptr(),
+            &mut gen2,
+            &mut p1,
+            &mut p2,
+        )
+    };
+    if result == 1 {
+        let mut result = s.to_vec();
+        result.extend(&e);
+        Ok(result)
+    } else {
+        Err(())
+    }
+}
+
+pub fn dleq_verify(proof: [u8; 64], gen2: [u8; 64], p1: [u8; 64], p2: [u8; 64]) -> Result<(), ()> {
+    let mut gen2 = bitbox02_sys::secp256k1_pubkey { data: gen2 };
+    let mut p1 = bitbox02_sys::secp256k1_pubkey { data: p1 };
+    let mut p2 = bitbox02_sys::secp256k1_pubkey { data: p2 };
+    let result = unsafe {
+        bitbox02_sys::foo_secp256k1_dleq_verify(
+            bitbox02_sys::wally_get_secp_context(),
+            (&proof[..32]).as_ptr(),
+            (&proof[32..]).as_ptr(),
+            &mut p1,
+            &mut gen2,
+            &mut p2,
+        )
+    };
+    if result == 1 {
+        Ok(())
+    } else {
+        Err(())
+    }
 }
 
 #[cfg(test)]

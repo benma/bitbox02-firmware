@@ -14,6 +14,7 @@
 
 #![no_std]
 
+#[macro_use]
 extern crate alloc;
 
 mod hash;
@@ -329,5 +330,42 @@ mod tests {
                 ),
             )
             .is_err());
+    }
+
+    #[test]
+    fn test_dleq() {
+        let secp = Secp256k1::new();
+        let seckey_bytes = b"\x07\x7e\xb7\x5a\x52\xec\xa2\x4c\xde\xdf\x05\x8c\x92\xf1\xca\x8b\x9d\x48\x41\x77\x1f\xd6\xba\xa3\xd2\x78\x85\xfb\x5b\x49\xfb\xa2";
+        let seckey = SecretKey::from_slice(seckey_bytes).unwrap();
+
+        let pubkey = seckey.public_key(&secp);
+
+        let other_base_bytes = b"\x03\x89\x14\x0f\x7b\xb8\x52\xf0\x20\xf1\x54\xe5\x59\x08\xfe\x36\x99\xdc\x9f\x65\x15\x3e\x68\x15\x27\xf0\xd5\x5a\xab\xed\x93\x7f\x4b";
+        let other_base = PublicKey::from_slice(other_base_bytes).unwrap();
+
+        let other_pubkey = other_base.clone();
+        let other_pubkey = other_pubkey.mul_tweak(&secp, &seckey.into()).unwrap();
+        let proof = bitbox02::dleq_prove(
+            *seckey_bytes,
+            (unsafe { &*other_base.as_ptr() }).underlying_bytes(),
+            (unsafe { &*pubkey.as_ptr() }).underlying_bytes(),
+            (unsafe { &*other_pubkey.as_ptr() }).underlying_bytes(),
+        )
+        .unwrap();
+
+        bitbox02::println_stdout(&format!(
+            "LOL {}, {}, {}, {}",
+            hex::encode(&proof),
+            hex::encode(pubkey.serialize()),
+            hex::encode(other_pubkey.serialize()),
+            hex::encode(other_base.serialize())
+        ));
+        bitbox02::dleq_verify(
+            proof.try_into().unwrap(),
+            (unsafe { &*other_base.as_ptr() }).underlying_bytes(),
+            (unsafe { &*pubkey.as_ptr() }).underlying_bytes(),
+            (unsafe { &*other_pubkey.as_ptr() }).underlying_bytes(),
+        )
+        .unwrap();
     }
 }

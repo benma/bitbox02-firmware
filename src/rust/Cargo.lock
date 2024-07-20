@@ -702,6 +702,7 @@ name = "streaming-silent-payments"
 version = "0.1.0"
 dependencies = [
  "bech32",
+ "bitbox02",
  "bitcoin",
  "hex",
  "serde",

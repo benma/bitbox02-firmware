@@ -26,6 +26,7 @@
 #include <secp256k1_ecdsa_s2c.h>
 #include <secp256k1_recovery.h>
 #include <secp256k1_schnorrsig.h>
+#include <secp256k1_ecdsa_adaptor.h>
 #include <securechip/securechip.h>
 #include <util.h>
 
@@ -727,6 +728,49 @@ static void _test_keystore_secp256k1_schnorr_bip86_sign(void** state)
     assert_true(secp256k1_schnorrsig_verify(ctx, sig, msg, sizeof(msg), &pubkey_deserialized));
 }
 
+static void _test_dleq(void** state)
+{
+    const secp256k1_context* ctx = wally_get_secp_context();
+
+    const uint8_t seckey_bytes[32] = "\x07\x7e\xb7\x5a\x52\xec\xa2\x4c\xde\xdf\x05\x8c\x92\xf1\xca\x8b\x9d\x48\x41\x77\x1f\xd6\xba\xa3\xd2\x78\x85\xfb\x5b\x49\xfb\xa2";
+
+    secp256k1_keypair keypair;
+    assert_true(secp256k1_keypair_create(ctx, &keypair, seckey_bytes));
+
+    secp256k1_pubkey pubkey;
+    assert_true(secp256k1_keypair_pub(ctx, &pubkey, &keypair));
+
+    const uint8_t other_base_bytes[33] = "\x03\x89\x14\x0f\x7b\xb8\x52\xf0\x20\xf1\x54\xe5\x59\x08\xfe\x36\x99\xdc\x9f\x65\x15\x3e\x68\x15\x27\xf0\xd5\x5a\xab\xed\x93\x7f\x4b";
+    secp256k1_pubkey other_base;
+    assert_true(secp256k1_ec_pubkey_parse(ctx, &other_base, other_base_bytes, sizeof(other_base_bytes)));
+
+    secp256k1_pubkey other_pubkey = other_base;
+    assert_true(secp256k1_ec_pubkey_tweak_mul(ctx, &other_pubkey, seckey_bytes));
+    /* uint8_t foo[65] = {0}; */
+    /* size_t foo_size = 65; */
+    /* assert_true(secp256k1_ec_pubkey_serialize(ctx, foo, &foo_size, &other_pubkey, SECP256K1_EC_UNCOMPRESSED)); */
+    /* printf("LOL0\n"); */
+    /* for(int i = 0; i < 65; i++) { */
+    /*     printf("%02x", foo[i]); */
+    /* } */
+    /* printf("\n"); */
+    uint8_t s[32] = {0};
+    uint8_t e[32] = {0};
+    assert_true(
+        foo_secp256k1_dleq_prove(ctx, s, e, seckey_bytes, &other_base, &pubkey, &other_pubkey)
+                );
+    printf("LOL\n");
+    for(int i = 0; i < 32; i++) {
+        printf("%02x", s[i]);
+    }
+    for(int i = 0; i < 32; i++) {
+        printf("%02x", e[i]);
+    }
+    printf("\n");
+    assert_true(foo_secp256k1_dleq_verify(ctx, s, e, &pubkey, &other_base, &other_pubkey));
+    assert_true(false);
+}
+
 int main(void)
 {
     mock_memory_set_salt_root(_salt_root);
@@ -746,6 +790,7 @@ int main(void)
         cmocka_unit_test(_test_secp256k1_schnorr_sign),
         cmocka_unit_test(_test_keystore_secp256k1_schnorr_bip86_pubkey),
         cmocka_unit_test(_test_keystore_secp256k1_schnorr_bip86_sign),
+        cmocka_unit_test(_test_dleq),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
