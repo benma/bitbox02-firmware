@@ -297,12 +297,16 @@ impl<'a> ParsedPolicy<'a> {
     ///
     /// Also checks that each key is used, e.g. if there are 3 keys in the key vector, @0, @1 and @2
     /// must be present.
+    ///
+    /// Also checks that the keys are referenced in order. From BIP-388:
+    /// https://github.com/bitcoin/bips/blob/master/bip-0388.mediawiki#additional-rules
+    /// > The key information vector should be ordered so that placeholder @i never appears for the first time before an occurrence of @j for some j < i; for example, the first placeholder is always @0, the next one is @1, etc.
     fn validate_keys(&self) -> Result<(), Error> {
         // in "@key_index/<left;right>", keeps track of (key_index,left) and
         // (key_index,right) to check for duplicates.
         let mut derivations_seen: Vec<(usize, u32)> = Vec::new();
 
-        let mut keys_seen: Vec<bool> = vec![false; self.policy.keys.len()];
+        let mut keys_seen: usize = 0;
 
         for pk in self.iter_pk() {
             let (key_index, multipath_index_left, multipath_index_right) =
@@ -317,10 +321,15 @@ impl<'a> ParsedPolicy<'a> {
             }
             derivations_seen.push((key_index, multipath_index_right));
 
-            *keys_seen.get_mut(key_index).ok_or(Error::InvalidInput)? = true;
+            if key_index > keys_seen {
+                return Err(Error::InvalidInput);
+            }
+            if key_index == keys_seen {
+                keys_seen += 1;
+            }
         }
 
-        if !keys_seen.into_iter().all(|b| b) {
+        if keys_seen != self.policy.keys.len() {
             return Err(Error::InvalidInput);
         }
         Ok(())
@@ -580,7 +589,7 @@ impl<'a> ParsedPolicy<'a> {
     fn taproot_is_unspendable_internal_key(&self) -> Result<Option<usize>, Error> {
         match &self.descriptor {
             Descriptor::Tr(tr) => {
-                let (internal_key_index, _, _) = parse_wallet_policy_pk(&tr.inner.internal_key())
+                let (internal_key_index, _, _) = parse_wallet_policy_pk(tr.inner.internal_key())
                     .map_err(|_| Error::InvalidInput)?;
                 let internal_xpub = self
                     .policy
@@ -1027,6 +1036,28 @@ mod tests {
         // Referenced key does not exist
         assert!(matches!(
             parse(&make_policy("wsh(pk(@1/**))", &[our_key.clone()]), coin),
+            Err(Error::InvalidInput)
+        ));
+
+        // Keys out of order.
+        assert!(matches!(
+            parse(
+                &make_policy(
+                    "wsh(multi(1,@1/**,@0/**))",
+                    &[our_key.clone(), make_key(SOME_XPUB_1)]
+                ),
+                coin
+            ),
+            Err(Error::InvalidInput)
+        ));
+        assert!(matches!(
+            parse(
+                &make_policy(
+                    "tr(@1/**,pk(@0/**))",
+                    &[our_key.clone(), make_key(SOME_XPUB_1)]
+                ),
+                coin
+            ),
             Err(Error::InvalidInput)
         ));
     }
