@@ -194,6 +194,7 @@ impl Wsh<bitcoin::PublicKey> {
 impl Wsh<String> {
     /// Iterates over all pubkey placeholders in this wsh descriptor.
     /// Example: wsh(and_v(v:pk(A),pk(B))) iterates over A, B.
+    /// This iterates the keys "left-to-right" in the descriptor.
     fn iter_pk(&self) -> impl Iterator<Item = String> + '_ {
         self.miniscript_expr.iter_pk()
     }
@@ -231,13 +232,13 @@ impl Tr<bitcoin::PublicKey> {
 }
 
 impl Tr<String> {
-    /// Iterates over the placeholder keys in each tapscript leaf and over the internal key.
-    /// Example: `tr(A,{pk(B),pk(C)}` iterates over B,C,A.
+    /// Iterates over the placeholder keys in the internal key and in each tapscript leaf,
+    /// i.e. "left-to-right" in the descriptor.
+    ///
+    /// Example: `tr(A,{pk(B),pk(C)}` iterates over A,B,C.
     fn iter_pk(&self) -> impl Iterator<Item = String> + '_ {
-        self.inner
-            .iter_scripts()
-            .flat_map(|(_, ms)| ms.iter_pk())
-            .chain(core::iter::once(self.inner.internal_key().clone()))
+        core::iter::once(self.inner.internal_key().clone())
+            .chain(self.inner.iter_scripts().flat_map(|(_, ms)| ms.iter_pk()))
     }
 }
 
@@ -275,6 +276,7 @@ pub struct ParsedPolicy<'a> {
 impl<'a> ParsedPolicy<'a> {
     /// Iterates over the placeholder keys in this descriptor. For tr() descriptors, this covers the
     /// internal key and every key in every leaf script.
+    /// This iterates the keys "left-to-right" in the descriptor.
     fn iter_pk(&self) -> alloc::boxed::Box<dyn Iterator<Item = String> + '_> {
         match &self.descriptor {
             Descriptor::Wsh(wsh) => alloc::boxed::Box::new(wsh.iter_pk()),
@@ -814,6 +816,45 @@ mod tests {
         // 2147483648 = HARDENED offset.
         assert!(parse_wallet_policy_pk("@0/<100;2147483648>/*").is_err());
         assert!(parse_wallet_policy_pk("@0/<2147483648;100>/*").is_err());
+    }
+
+    // Tests that iter_pk() iterates the pubkeys from left to right as they appear in the
+    // descriptor.
+    #[test]
+    fn test_iter_pk_left_to_right() {
+        mock_unlocked();
+        struct Test {
+            policy: &'static str,
+            expected_pks: &'static [&'static str],
+        }
+        let tests = &[
+            Test {
+                policy: "wsh(andor(pk(@0/**),or_d(pk(@1/**),older(12960)),pk(@2/**)))",
+                expected_pks: &["@0/**", "@1/**", "@2/**"],
+            },
+            Test {
+                policy: "tr(@0/<0;1>/*,{and_v(v:multi_a(1,@1/<2;3>/*,@2/<2;3>/*),older(2)),multi_a(2,@1/<0;1>/*,@2/<0;1>/*)})",
+                expected_pks: &[
+                    "@0/<0;1>/*",
+                    "@1/<2;3>/*",
+                    "@2/<2;3>/*",
+                    "@1/<0;1>/*",
+                    "@2/<0;1>/*",
+                ],
+            },
+        ];
+        for test in tests {
+            let policy = make_policy(
+                test.policy,
+                &[
+                    make_key(SOME_XPUB_1),
+                    make_key(SOME_XPUB_2),
+                    make_our_key(KEYPATH_ACCOUNT),
+                ],
+            );
+            let pks: Vec<String> = parse(&policy, BtcCoin::Tbtc).unwrap().iter_pk().collect();
+            assert_eq!(pks.as_slice(), test.expected_pks);
+        }
     }
 
     #[test]
