@@ -76,6 +76,7 @@ dockerdev () {
     $RUNTIME run \
            --detach \
            --interactive --tty \
+           --network=host \
            --name="$CONTAINER_NAME" \
            -v "$repo_path":"$MOUNT_DIR" \
            --cap-add SYS_PTRACE \
