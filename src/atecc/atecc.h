@@ -58,6 +58,7 @@ USE_RESULT bool atecc_update_keys(void);
  * @param[out] kdf_out Must have size 32. Result of the kdf will be stored here.
  * Cannot be the same as `msg`.
  * @return values of `atecc_error_t` if negative, values of `ATCA_STATUS` if positive, 0 on
+ * success.
  */
 USE_RESULT int atecc_kdf(const uint8_t* msg, size_t len, uint8_t* kdf_out);
 
@@ -70,6 +71,7 @@ USE_RESULT int atecc_kdf(const uint8_t* msg, size_t len, uint8_t* kdf_out);
  * @param[out] kdf_out Must have size 32. Result of the kdf will be stored here.
  * Cannot be the same as `msg`.
  * @return values of `securechip_error_t` if negative, values of `ATCA_STATUS` if positive, 0 on
+ * success.
  */
 USE_RESULT int atecc_kdf_rollkey(const uint8_t* msg, size_t len, uint8_t* kdf_out);
 

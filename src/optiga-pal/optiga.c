@@ -22,8 +22,9 @@
 #include "pal/pal_os_timer.h"
 #include "securechip/securechip.h"
 #include "util.h"
+#include "rust/rust.h"
 
-#define OPTIGA_DATA_OBJECT_ID_HMAC 0xF1D0
+#define OPTIGA_DATA_OBJECT_ID_HMAC 0xF1D1
 #define OPTIGA_DATA_OBJECT_ID_PLATFORM_BINDING 0xE140
 
 #define ABORT_IF_NULL(ptr)           \
@@ -292,7 +293,7 @@ static bool _write_config(void)
     //
     // Configure HMAC data object
     //
-
+    rust_log("HMAC metadata");
     OPTIGA_UTIL_SET_COMMS_PROTECTION_LEVEL(util, OPTIGA_COMMS_NO_PROTECTION);
     res = _optiga_util_write_metadata_sync(
         util, OPTIGA_DATA_OBJECT_ID_HMAC, hmac_metadata, sizeof(hmac_metadata));
@@ -381,7 +382,7 @@ int optiga_setup(const securechip_interface_functions_t* ifs)
 #if true // FACTORYSETUP == 1
     bool res = _factory_setup();
     if (!res) {
-        return res;
+        return 1;
     }
 #endif
 
@@ -397,9 +398,9 @@ static bool _update_hmac_key(void)
     ABORT_IF_NULL(_ifs);
     ABORT_IF_NULL(_ifs->random_32_bytes);
 
-    uint8_t new_key[32] = {0};
-    _ifs->random_32_bytes(new_key);
-
+    /* uint8_ti new_key[32] = {0}; */
+    /* _ifs->random_32_bytes(new_key); */
+    uint8_t new_key[32] = "\x7f\x72\x91\xc5\xe7\xb2\x9d\xa9\x04\x8e\x3c\xd7\xa7\x32\x7c\x6e\x1c\x0b\xa2\x7b\xef\xf6\x37\x75\x4d\xec\x40\x4b\x26\xc8\x27\xc7";
 
     return _optiga_util_write_data_sync(
                util,
@@ -422,9 +423,13 @@ int optiga_hmac(const uint8_t* msg, size_t len, uint8_t* mac_out)
         crypt, OPTIGA_HMAC_SHA_256, OPTIGA_DATA_OBJECT_ID_HMAC, msg, len, mac_out, &mac_out_len);
 
     if (mac_out_len != 32) {
+        return 1;
     }
 
-    return res == OPTIGA_LIB_SUCCESS;
+    if (res != OPTIGA_LIB_SUCCESS) {
+        return 1;
+    }
+    return 0;
 }
 
 // rand_out must be 32 bytes
