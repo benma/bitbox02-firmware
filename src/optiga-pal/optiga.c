@@ -134,20 +134,20 @@ static const uint8_t hmac_metadata[] = {
 // Sync wrappers around optiga util/crypt functions
 //
 
-// static optiga_lib_status_t _optiga_util_read_data_sync(
-//     optiga_util_t* me,
-//     uint16_t optiga_oid,
-//     uint16_t offset,
-//     uint8_t* buffer,
-//     uint16_t* length)
-//{
-//     ABORT_IF_NULL(me);
-//
-//     optiga_lib_status = OPTIGA_LIB_BUSY;
-//     optiga_lib_status_t res = optiga_util_read_data(me, optiga_oid, offset, buffer, length);
-//     _WAIT(res, optiga_lib_status);
-//     return res;
-// }
+static optiga_lib_status_t _optiga_util_read_data_sync(
+    optiga_util_t* me,
+    uint16_t optiga_oid,
+    uint16_t offset,
+    uint8_t* buffer,
+    uint16_t* length)
+{
+    ABORT_IF_NULL(me);
+
+    optiga_lib_status = OPTIGA_LIB_BUSY;
+    optiga_lib_status_t res = optiga_util_read_data(me, optiga_oid, offset, buffer, length);
+    _WAIT(res, optiga_lib_status);
+    return res;
+}
 
 // static optiga_lib_status_t _optiga_util_read_metadata_sync(
 //     optiga_util_t* me,
@@ -365,6 +365,13 @@ static bool _verify_config(void)
     if (res != OPTIGA_LIB_SUCCESS) {
         return false;
     }
+
+    uint8_t buf[4] = {0};
+    res = q_optiga_util_read_data_sync(util, 0xE120, 0, buf, 4);
+    if (res != OPTIGA_LIB_SUCCESS) {
+        return false;
+    }
+
     return true;
 }
 
