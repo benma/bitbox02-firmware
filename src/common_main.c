@@ -99,15 +99,4 @@ void common_main(void)
             securechip_result);
         AbortAutoenter(errmsg);
     }
-
-    char str[1000];
-    char hex[500];
-    uint8_t hmac[32] = {0};
-    uint8_t msg[32] = "\x20\x5c\x85\x01\x9f\x41\xe8\x8c\x54\x46\x26\x57\x01\x09\x1e\x46\x36\xb4\x3e\xb3\x98\xee\xad\x61\xad\x0f\x8c\x58\x93\xcd\xd4\x60";
-    if (securechip_kdf(msg, 32, hmac) != 0) {
-        Abort("kdf fail");
-    }
-    util_uint8_to_hex(hmac, 32, hex);
-    snprintf(str, sizeof(str), "hmac result: %s", hex);
-    rust_log(str);
 }
