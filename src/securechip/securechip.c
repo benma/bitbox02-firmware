@@ -44,7 +44,10 @@ bool securechip_init(void)
     switch (memory_get_securechip_type()) {
     case MEMORY_SECURECHIP_TYPE_OPTIGA:
         _fns.setup = optiga_setup;
-        _fns.kdf = optiga_hmac;
+        _fns.update_keys = optiga_update_keys;
+        _fns.kdf = optiga_kdf_external;
+        _fns.kdf_rollkey = optiga_kdf_internal;
+        _fns.monotonic_increments_remaining = optiga_monotonic_increments_remaining;
         _fns.random = optiga_random;
         _fns.model = optiga_model;
         break;
