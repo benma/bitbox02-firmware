@@ -47,6 +47,8 @@ bool securechip_init(void)
         _fns.update_keys = optiga_update_keys;
         _fns.kdf = optiga_kdf_external;
         _fns.kdf_rollkey = optiga_kdf_internal;
+        _fns.gen_attestation_key = optiga_gen_attestation_key;
+        _fns.attestation_sign = optiga_attestation_sign;
         _fns.monotonic_increments_remaining = optiga_monotonic_increments_remaining;
         _fns.random = optiga_random;
         _fns.model = optiga_model;

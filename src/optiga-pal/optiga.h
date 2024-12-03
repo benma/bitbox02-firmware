@@ -22,9 +22,10 @@
 bool optiga_update_keys(void);
 int optiga_setup(const securechip_interface_functions_t* ifs);
 bool optiga_monotonic_increments_remaining(uint32_t* remaining_out);
-bool optiga_ecc_generate_public_key(uint8_t* priv_key, uint8_t* pub_key);
 bool optiga_random(uint8_t* rand_out);
 int optiga_kdf_internal(const uint8_t* msg, size_t len, uint8_t* mac_out);
 int optiga_kdf_external(const uint8_t* msg, size_t len, uint8_t* mac_out);
+bool optiga_gen_attestation_key(uint8_t* pubkey_out);
+bool optiga_attestation_sign(const uint8_t* challenge, uint8_t* signature_out);
 bool optiga_model(securechip_model_t* model_out);
 #endif // _OPTIGA_H_

@@ -99,4 +99,15 @@ void common_main(void)
             securechip_result);
         AbortAutoenter(errmsg);
     }
+    uint8_t pubkey[64] = {0};
+    if (securechip_gen_attestation_key(pubkey)) {
+        util_log("%s", util_dbg_hex(pubkey, 32));
+        util_log("%s", util_dbg_hex(pubkey+32, 32));
+    }
+    uint8_t sig[64] = {0};
+    uint8_t msg[32] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    if (securechip_attestation_sign(msg, sig)) {
+        util_log("%s", util_dbg_hex(sig, 32));
+        util_log("%s", util_dbg_hex(sig+32, 32));
+    }
 }

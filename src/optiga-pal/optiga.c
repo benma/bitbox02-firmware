@@ -26,7 +26,7 @@
 
 #define OPTIGA_DATA_OBJECT_ID_AES_SYMKEY 0xE200
 #define OPTIGA_DATA_OBJECT_ID_HMAC 0xF1D0
-#define OPTIGA_DATA_OBJECT_ID_UNSAFE_SIGN 0xF1D1
+#define OPTIGA_DATA_OBJECT_ID_ECC 0xE0F1
 #define OPTIGA_DATA_OBJECT_ID_PLATFORM_BINDING 0xE140
 #define OPTIGA_DATA_OBJECT_ID_COUNTER0 0xE120
 
@@ -135,6 +135,16 @@ static const uint8_t e200_metadata[] = {
     0xD3, 0x03, 0x40, 0xE1, 0x20,
 };
 
+static const uint8_t ecc_metadata[] = {
+    0x20,
+    12,
+    // Sign
+    0xE1, 0x01,0x10,
+    0xD0, 0x01, 0x00, //change
+    0xD1, 0x01, 0xFF, // disallow read
+    0xD3, 0x01, 0x00, // exe
+};
+
 /* static const uint8_t counter_metdata[] = { */
 /*     0x20, */
 /*     // TODO Len, */
@@ -154,21 +164,6 @@ static const uint8_t hmac_metadata[] = {
     // Disallow reads
     0xD1, 0x01, 0xFF,
     // 0xD3, 0x01, 0x00,
-    0xD3, 0x01, 0x00, // exe
-};
-
-static const uint8_t unsafe_sign_metadata[] = {
-    // Metadata tag in the data object
-    0x20,
-    12,
-    // Key object type set to Sign
-    0xE1,
-    0x01,
-    0x10,
-    // Allow writes
-    0xD0, 0x01, 0x00,
-    // Disallow reads
-    0xD1, 0x01, 0xFF,
     0xD3, 0x01, 0x00, // exe
 };
 
@@ -274,6 +269,41 @@ static optiga_lib_status_t _optiga_crypt_hmac_sync(
     optiga_lib_status = OPTIGA_LIB_BUSY;
     optiga_lib_status_t res =
         optiga_crypt_hmac(me, type, secret, input_data, input_data_length, mac, mac_length);
+    _WAIT(res, optiga_lib_status);
+    return res;
+}
+
+static optiga_lib_status_t _optiga_crypt_ecc_generate_keypair_sync(
+    optiga_crypt_t *me,
+    optiga_ecc_curve_t curve_id,
+    uint8_t key_usage,
+    bool_t export_private_key,
+    void *private_key,
+    uint8_t *public_key,
+    uint16_t *public_key_length)
+{
+    ABORT_IF_NULL(me);
+
+    optiga_lib_status = OPTIGA_LIB_BUSY;
+    optiga_lib_status_t res =
+        optiga_crypt_ecc_generate_keypair(me, curve_id, key_usage, export_private_key, private_key, public_key, public_key_length);
+    _WAIT(res, optiga_lib_status);
+    return res;
+}
+
+static optiga_lib_status_t _optiga_crypt_ecdsa_sign_sync(
+    optiga_crypt_t *me,
+    const uint8_t *digest,
+    uint8_t digest_length,
+    optiga_key_id_t private_key,
+    uint8_t *signature,
+    uint16_t *signature_length)
+{
+    ABORT_IF_NULL(me);
+
+    optiga_lib_status = OPTIGA_LIB_BUSY;
+    optiga_lib_status_t res =
+        optiga_crypt_ecdsa_sign(me, digest, digest_length, private_key, signature, signature_length);
     _WAIT(res, optiga_lib_status);
     return res;
 }
@@ -456,15 +486,6 @@ static bool _write_config(void)
         return false;
     }
 
-    rust_log("unsafe sign metadata");
-    OPTIGA_UTIL_SET_COMMS_PROTECTION_LEVEL(util, OPTIGA_COMMS_NO_PROTECTION);
-    res = _optiga_util_write_metadata_sync(
-        util, OPTIGA_DATA_OBJECT_ID_UNSAFE_SIGN, unsafe_sign_metadata, sizeof(unsafe_sign_metadata));
-    if (res != OPTIGA_LIB_SUCCESS) {
-        util_log("unsafe sign metadata failed: %x", res);
-        return false;
-    }
-
     // Configure the monotonic counter.
     // Table 73, "Counter".
     uint8_t counter_buf[] = {
@@ -486,6 +507,18 @@ static bool _write_config(void)
         return false;
     }
 
+    // ECC slot metadata
+    OPTIGA_UTIL_SET_COMMS_PROTECTION_LEVEL(util, OPTIGA_COMMS_NO_PROTECTION);
+    res = _optiga_util_write_metadata_sync(
+        util,
+        OPTIGA_DATA_OBJECT_ID_ECC,
+        ecc_metadata,
+        sizeof(ecc_metadata));
+    if (res != OPTIGA_LIB_SUCCESS) {
+        util_log("ECC metadata update failed: %x", res);
+        return false;
+    }
+
     // TODO debug, remove.
     if(!optiga_update_keys()) {
         util_log("update hmac key failed");
@@ -501,11 +534,13 @@ static bool _factory_setup(void)
 
     util = optiga_util_create(OPTIGA_INSTANCE_ID_0, optiga_lib_callback, NULL);
     if (NULL == util) {
+        util_log("couldn't create optiga util");
         return false;
     }
 
     crypt = optiga_crypt_create(OPTIGA_INSTANCE_ID_0, optiga_lib_callback, NULL);
     if (NULL == crypt) {
+        util_log("couldn't create optiga crypt");
         return false;
     }
 
@@ -534,23 +569,6 @@ static bool _factory_setup(void)
         util = NULL;
     }
 
-    return true;
-}
-
-bool optiga_ecc_generate_public_key(uint8_t* priv_key, uint8_t* pub_key)
-{
-    (void)pub_key;
-    ABORT_IF_NULL(util);
-    optiga_lib_status_t res = _optiga_util_write_data_sync(
-               util,
-               OPTIGA_DATA_OBJECT_ID_UNSAFE_SIGN,
-               OPTIGA_UTIL_ERASE_AND_WRITE,
-               0x00,
-               priv_key,
-               32);
-    if (res != OPTIGA_UTIL_SUCCESS) {
-        return false;
-    }
     return true;
 }
 
@@ -590,17 +608,6 @@ static bool _verify_config(void)
     /* snprintf(str, sizeof(str), "hmac result: %s", hex); */
     /* rust_log(str); */
 
-    uint8_t tstpriv[32] = "\x2d\x20\xa4\xa0\xe1\x22\xec\xab\x2d\x8e\x17\xbe\x8b\x15\xf6\xda\xa9\xa7\xa8\xa9\xfb\xdd\xc0\xd5\x3e\x3c\x65\x25\x40\x1e\x20\xcb";
-    uint8_t tstpub[64] = {0};
-    if (!optiga_ecc_generate_public_key(tstpriv, tstpub)) {
-        util_log("ecc gen pubkey failed");
-    } else {
-        char str[1000];
-        char hex[500];
-        util_uint8_to_hex(tstpub, sizeof(tstpub), hex);
-        snprintf(str, sizeof(str), "gen pubkey result: %s", hex);
-        rust_log(str);
-    }
 
     size = sizeof(buf);
     res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size);
@@ -677,6 +684,89 @@ int optiga_kdf_external(const uint8_t* msg, size_t len, uint8_t* mac_out)
     }
 
     return 0;
+}
+
+bool optiga_gen_attestation_key(uint8_t* pubkey_out)
+{
+    ABORT_IF_NULL(crypt);
+    optiga_key_id_t slot = OPTIGA_KEY_ID_E0F1;
+    uint8_t pubkey_der[68] = {0};
+    uint16_t pubkey_der_size = sizeof(pubkey_der);
+    optiga_lib_status_t res = _optiga_crypt_ecc_generate_keypair_sync(
+        crypt,
+        OPTIGA_ECC_CURVE_NIST_P_256,
+        OPTIGA_KEY_USAGE_SIGN,
+        false,
+        (void*)&slot,
+        pubkey_der,
+        &pubkey_der_size);
+    if (res != OPTIGA_CRYPT_SUCCESS) {
+        util_log("gen keypair failed: %x", res);
+        return false;
+    }
+    // Parse DER "BIT STRING", see Solution Reference Manual 6.2.2,
+    // example for ECC NIST-P256.
+    // The 64 byte X/Y values are the last 64 bytes.
+    if (pubkey_der_size != 68 || !MEMEQ(pubkey_der, "\x03\x42\x00\x04", 4)) {
+        return false;
+    }
+    memcpy(pubkey_out, pubkey_der + 4, 64);
+    return true;
+}
+
+// TODO: replace with some library funcs that can parse DER ints
+static const uint8_t* _parse_der_int(const uint8_t* input, uint8_t* out)
+{
+    if (*input != 0x02) {
+        return NULL;
+    }
+    memset(out, 0, 32);
+    input++;
+    size_t len = *input;
+    input++;
+    if (len > 33) {
+        return NULL;
+    }
+    if (len > 1 && *input == 0x00 && *(input + 1) > 0x7F) {
+        len--;
+        input++;
+    }
+    memcpy(out + 32 - len, input, len);
+    input += len;
+    return input;
+}
+
+bool optiga_attestation_sign(const uint8_t* challenge, uint8_t* signature_out)
+{
+    ABORT_IF_NULL(crypt);
+    uint8_t sig_der[70] = {0};
+    uint16_t sig_der_size = sizeof(sig_der);
+    optiga_lib_status_t res = _optiga_crypt_ecdsa_sign_sync(
+        crypt,
+        challenge,
+        32,
+        OPTIGA_KEY_ID_E0F1,
+        sig_der,
+        &sig_der_size);
+    if (res != OPTIGA_CRYPT_SUCCESS) {
+        util_log("sign failed: %x", res);
+        return false;
+    }
+    // Parse signature, see Solution Reference Manual 6.2.2,
+    // example for ECC NIST-P256 signature.
+    // The R/S components are
+    util_log("sign %d", sig_der_size);
+    const uint8_t* ptr = _parse_der_int(sig_der, signature_out);
+    if (ptr == NULL) {
+        util_log("parse 1 fail");
+        return false;
+    }
+    ptr = _parse_der_int(ptr, signature_out + 32);
+    if (ptr == NULL) {
+        util_log("parse 2 fail");
+        return false;
+    }
+    return true;
 }
 
 // rand_out must be 32 bytes
