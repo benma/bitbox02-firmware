@@ -714,28 +714,6 @@ bool optiga_gen_attestation_key(uint8_t* pubkey_out)
     return true;
 }
 
-// TODO: replace with some library funcs that can parse DER ints
-static const uint8_t* _parse_der_int(const uint8_t* input, uint8_t* out)
-{
-    if (*input != 0x02) {
-        return NULL;
-    }
-    memset(out, 0, 32);
-    input++;
-    size_t len = *input;
-    input++;
-    if (len > 33) {
-        return NULL;
-    }
-    if (len > 1 && *input == 0x00 && *(input + 1) > 0x7F) {
-        len--;
-        input++;
-    }
-    memcpy(out + 32 - len, input, len);
-    input += len;
-    return input;
-}
-
 bool optiga_attestation_sign(const uint8_t* challenge, uint8_t* signature_out)
 {
     ABORT_IF_NULL(crypt);
@@ -756,17 +734,9 @@ bool optiga_attestation_sign(const uint8_t* challenge, uint8_t* signature_out)
     // example for ECC NIST-P256 signature.
     // The R/S components are
     util_log("sign %d", sig_der_size);
-    const uint8_t* ptr = _parse_der_int(sig_der, signature_out);
-    if (ptr == NULL) {
-        util_log("parse 1 fail");
-        return false;
-    }
-    ptr = _parse_der_int(ptr, signature_out + 32);
-    if (ptr == NULL) {
-        util_log("parse 2 fail");
-        return false;
-    }
-    return true;
+    return rust_der_parse_optiga_signature(
+            rust_util_bytes(sig_der, sig_der_size),
+            rust_util_bytes_mut(signature_out, 64));
 }
 
 // rand_out must be 32 bytes
