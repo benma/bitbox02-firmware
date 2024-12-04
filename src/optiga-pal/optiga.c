@@ -24,6 +24,11 @@
 #include "util.h"
 #include "rust/rust.h"
 
+// Number of times the first kdf slot can be used.
+// The maxmimum does not seem to be specified, so we use something a little below the endurance
+// indication of 600000 updates. See Solution Reference Manual Figure 32.
+#define MONOTONIC_COUNTER_MAX_USE (590000)
+
 #define OPTIGA_DATA_OBJECT_ID_AES_SYMKEY 0xE200
 #define OPTIGA_DATA_OBJECT_ID_HMAC 0xF1D0
 #define OPTIGA_DATA_OBJECT_ID_ECC 0xE0F1
@@ -86,24 +91,18 @@ static void optiga_lib_callback(void* callback_ctx, optiga_lib_status_t event)
 const uint8_t platform_binding_shared_secret_metadata_final[] = {
     // Metadata to be updated
     0x20,
-    0x17,
+    0x13,
     // LcsO
     0xC0,
     0x01,
     FINAL_LCSO_STATE, // Refer Macro to see the value or some more notes
     // Change/Write Access tag
     0xD0,
-    0x07,
-    // This allows updating the binding secret during the runtime using shielded connection
-    // If not required to update the secret over the runtime, set this to NEV and
-    // update Metadata length accordingly
+    0x03,
+    // This allows updating the binding secret when LcsO < op.
     0xE1,
     0xFC,
     LCSO_STATE_OPERATIONAL, // LcsO < Operational state
-    0xFE,
-    0x20,
-    0xE1,
-    0x40,
     // Read Access tag
     0xD1,
     0x03,
@@ -121,16 +120,10 @@ const uint8_t platform_binding_shared_secret_metadata_final[] = {
 };
 
 static const uint8_t e200_metadata[] = {
-    //0x20, 0x06, 0xD0, 0x01, 0xFF, 0xD3, 0x01, 0x00
     0x20,
-    14,
-    // Pressec
-    0xE8,0x01,0x21,
-    //0xE0, 0x01, 0x83,
-    //0xE1, 0x01, 0x01,
-    0xD0, 0x01, 0x00, //change
+    11,
+    0xD0, 0x01, 0x00, // allow change
     0xD1, 0x01, 0xFF, // disallow read
-    //0xD3, 0x01, 0x00, // exe
     // Attach to counter at 0xE120
     0xD3, 0x03, 0x40, 0xE1, 0x20,
 };
@@ -436,9 +429,12 @@ static bool _write_config(void)
         OPTIGA_PLATFORM_BINDING_SHARED_SECRET_ID, platform_binding_secret, &len);
 
     if (PAL_STATUS_SUCCESS != pal_res) {
+        util_log("failed datastore read: %x", pal_res);
         return false;
     }
 
+    // We write the binding secret before updating the metadata, as the metadata update locks the
+    // slot.
     OPTIGA_UTIL_SET_COMMS_PROTECTION_LEVEL(util, OPTIGA_COMMS_NO_PROTECTION);
     res = _optiga_util_write_data_sync(
         util,
@@ -448,6 +444,7 @@ static bool _write_config(void)
         platform_binding_secret,
         sizeof(platform_binding_secret));
     if (res != OPTIGA_LIB_SUCCESS) {
+        util_log("fail:write binding secret to chip: %x", res);
         return false;
     }
 
@@ -458,11 +455,11 @@ static bool _write_config(void)
         platform_binding_shared_secret_metadata_final,
         sizeof(platform_binding_shared_secret_metadata_final));
     if (res != OPTIGA_LIB_SUCCESS) {
+        util_log("fail: write metadata of platform binding: %x", res);
         return false;
     }
 
     // Configure AES secret key
-    OPTIGA_UTIL_SET_COMMS_PROTECTION_LEVEL(util, OPTIGA_COMMS_NO_PROTECTION);
     res = _optiga_util_write_metadata_sync(
         util,
         OPTIGA_DATA_OBJECT_ID_AES_SYMKEY,
@@ -478,7 +475,6 @@ static bool _write_config(void)
     // Configure HMAC data object
     //
     rust_log("HMAC metadata");
-    OPTIGA_UTIL_SET_COMMS_PROTECTION_LEVEL(util, OPTIGA_COMMS_NO_PROTECTION);
     res = _optiga_util_write_metadata_sync(
         util, OPTIGA_DATA_OBJECT_ID_HMAC, hmac_metadata, sizeof(hmac_metadata));
     if (res != OPTIGA_LIB_SUCCESS) {
@@ -488,27 +484,26 @@ static bool _write_config(void)
 
     // Configure the monotonic counter.
     // Table 73, "Counter".
-    uint8_t counter_buf[] = {
-        // Initial counter value
-        0x00, 0x00, 0x00, 0x00,
-        // Treshold
-        0x00, 0x00, 0x00, 0x0A,
-    };
-    OPTIGA_UTIL_SET_COMMS_PROTECTION_LEVEL(util, OPTIGA_COMMS_NO_PROTECTION);
+    // Bytes 0-3 are the initial counter value, set to 0.
+    // Bytes 4-7 are the threshold.
+    // Ints are encoded as uint32 big endian.
+    uint8_t counter_buf[8] = {0};
+    optiga_common_set_uint32(&counter_buf[4], MONOTONIC_COUNTER_MAX_USE);
     res = _optiga_util_write_data_sync(
         util,
         OPTIGA_DATA_OBJECT_ID_COUNTER0,
         OPTIGA_UTIL_ERASE_AND_WRITE,
-        0,
+        ,0x
         counter_buf,
         sizeof(counter_buf));
     if (res != OPTIGA_LIB_SUCCESS) {
-        util_log("foo %x", res);
+        util_log("fail: write initial counter data %x", res);
         return false;
     }
 
+    // TODO write counter metadata
+
     // ECC slot metadata
-    OPTIGA_UTIL_SET_COMMS_PROTECTION_LEVEL(util, OPTIGA_COMMS_NO_PROTECTION);
     res = _optiga_util_write_metadata_sync(
         util,
         OPTIGA_DATA_OBJECT_ID_ECC,
@@ -544,9 +539,13 @@ static bool _factory_setup(void)
         return false;
     }
 
+    OPTIGA_UTIL_SET_COMMS_PROTOCOL_VERSION(util, OPTIGA_COMMS_PROTOCOL_VERSION_PRE_SHARED_SECRET);
+    OPTIGA_CRYPT_SET_COMMS_PROTOCOL_VERSION(crypt, OPTIGA_COMMS_PROTOCOL_VERSION_PRE_SHARED_SECRET);
+
     OPTIGA_UTIL_SET_COMMS_PROTECTION_LEVEL(util, OPTIGA_COMMS_NO_PROTECTION);
     res = _optiga_util_open_application_sync(util, 0);
     if (res != OPTIGA_LIB_SUCCESS) {
+        util_log("failed to open util application: %x", res);
         return false;
     }
 
@@ -585,6 +584,18 @@ static bool _verify_config(void)
         return false;
     }
 
+    OPTIGA_UTIL_SET_COMMS_PROTOCOL_VERSION(util, OPTIGA_COMMS_PROTOCOL_VERSION_PRE_SHARED_SECRET);
+    OPTIGA_CRYPT_SET_COMMS_PROTOCOL_VERSION(crypt, OPTIGA_COMMS_PROTOCOL_VERSION_PRE_SHARED_SECRET);
+
+    if (crypt->protection_level != OPTIGA_COMMS_FULL_PROTECTION) {
+        util_log("crypt protection level expected to be FULL");
+        return false;
+    }
+    if (util->protection_level != OPTIGA_COMMS_FULL_PROTECTION) {
+        util_log("util protection level expected to be FULL");
+        return false;
+    }
+
     res = _optiga_util_open_application_sync(util, 0);
     if (res != OPTIGA_LIB_SUCCESS) {
         return false;
@@ -597,17 +608,12 @@ static bool _verify_config(void)
     }
     util_log("CTR %d %x %x %x %x %x %x %x %x", size, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
 
-    /* char str[1000]; */
-    /* char hex[500]; */
-    /* uint8_t hmac[32] = {0}; */
-    /* uint8_t msg[32] = "\x20\x5c\x85\x01\x9f\x41\xe8\x8c\x54\x46\x26\x57\x01\x09\x1e\x46\x36\xb4\x3e\xb3\x98\xee\xad\x61\xad\x0f\x8c\x58\x93\xcd\xd4\x60"; */
-    /* if (securechip_kdf_rollkey(msg, 32, hmac) != 0) { */
-    /*     Abort("kdf fail"); */
-    /* } */
-    /* util_uint8_to_hex(hmac, 32, hex); */
-    /* snprintf(str, sizeof(str), "hmac result: %s", hex); */
-    /* rust_log(str); */
-
+    uint8_t hmac[32] = {0};
+    uint8_t msg[32] = "\x20\x5c\x85\x01\x9f\x41\xe8\x8c\x54\x46\x26\x57\x01\x09\x1e\x46\x36\xb4\x3e\xb3\x98\xee\xad\x61\xad\x0f\x8c\x58\x93\xcd\xd4\x60";
+    if (securechip_kdf_rollkey(msg, 32, hmac) != 0) {
+        Abort("kdf fail");
+    }
+    util_log("hmac result: %s", util_dbg_hex(hmac, sizeof(hmac)));
 
     size = sizeof(buf);
     res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size);
@@ -626,6 +632,8 @@ int optiga_setup(const securechip_interface_functions_t* ifs)
         return SC_ERR_IFS;
     }
     _ifs = ifs;
+
+    util_log("optiga_setup");
 
     // A timer is used to provide the OPTIGA library with the ability to schedule work on the main
     // event loop
@@ -742,8 +750,12 @@ bool optiga_attestation_sign(const uint8_t* challenge, uint8_t* signature_out)
 // rand_out must be 32 bytes
 bool optiga_random(uint8_t* rand_out)
 {
-    return _optiga_crypt_random_sync(crypt, OPTIGA_RNG_TYPE_TRNG, rand_out, 32) ==
-           OPTIGA_CRYPT_SUCCESS;
+    optiga_lib_status_t res = _optiga_crypt_random_sync(crypt, OPTIGA_RNG_TYPE_TRNG, rand_out, 32);
+    if (res != OPTIGA_CRYPT_SUCCESS) {
+        util_log("optiga_random failed: %x", res);
+        return false;
+    }
+    return true;
 }
 
 bool optiga_model(securechip_model_t* model_out)
@@ -751,11 +763,3 @@ bool optiga_model(securechip_model_t* model_out)
     *model_out = OPTIGA_TRUST_M_V3;
     return true;
 }
-
-// bool _ecc_write_priv_key(uint8_t* priv_key) {
-//
-// }
-//
-// bool securitufunctions_ecc_generate_public_key(uint8_t* priv_key, uint8_t* pub_key) {
-//     _ecc_write_priv_key(priv_key
-// }

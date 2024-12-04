@@ -37,25 +37,19 @@
 
 #include "pal_os_datastore.h"
 #include "memory/memory.h"
+#include <util.h>
+
 /// @cond hidden
 
+// While the binding shared secret is read using pal_os_datastore_read() by the optiga library,
+// we are suppoesd to store it manually using pal_os_datastore_write() during factory setup.
+// However, we use the memory io protection key for that, which is initialized during memory_setup().
 pal_status_t pal_os_datastore_write(uint16_t datastore_id, const uint8_t* p_buffer, uint16_t length)
 {
-    pal_status_t return_status = PAL_STATUS_FAILURE;
     (void)p_buffer;
     (void)length;
-
-    switch (datastore_id) {
-    case OPTIGA_PLATFORM_BINDING_SHARED_SECRET_ID: {
-        // Not implemented
-        return_status = PAL_STATUS_FAILURE;
-        break;
-    }
-    default: {
-        break;
-    }
-    }
-    return return_status;
+    util_log("pal_datastore_write, id=%d", datastore_id);
+    return PAL_STATUS_FAILURE;
 }
 
 pal_status_t pal_os_datastore_read(
@@ -64,6 +58,7 @@ pal_status_t pal_os_datastore_read(
     uint16_t* p_buffer_length)
 {
     pal_status_t return_status = PAL_STATUS_FAILURE;
+    util_log("pal_datastore_read, id=%d", datastore_id);
 
     switch (datastore_id) {
     case OPTIGA_PLATFORM_BINDING_SHARED_SECRET_ID: {
