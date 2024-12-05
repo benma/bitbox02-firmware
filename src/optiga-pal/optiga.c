@@ -376,14 +376,23 @@ static optiga_lib_status_t _optiga_crypt_symmetric_generate_key_sync(
 
 bool optiga_monotonic_increments_remaining(uint32_t* remaining_out)
 {
-    // TODO
-    *remaining_out = 1000;
+    uint8_t buf[4] = {0};
+    uint16_t size = sizeof(buf);
+    optiga_lib_status_t res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size);
+    if (res != OPTIGA_LIB_SUCCESS) {
+        return false;
+    }
+
+    uint32_t counter = optiga_common_get_uint32(buf);
+    if (counter > MONOTONIC_COUNTER_MAX_USE) {
+        Abort("optiga monotonic counter larget than max");
+    }
+    *remaining_out = MONOTONIC_COUNTER_MAX_USE - counter;
     return true;
 }
 
 bool optiga_update_keys(void)
 {
-    ABORT_IF_NULL(util);
     ABORT_IF_NULL(_ifs);
     ABORT_IF_NULL(_ifs->random_32_bytes);
 
@@ -412,6 +421,99 @@ bool optiga_update_keys(void)
     util_log("genkey: %x", res);
 
     return res == OPTIGA_UTIL_SUCCESS;
+}
+
+static void _experiment_locks(void)
+{
+    /* const uint8_t metadata[] = { */
+    /*     0x20, */
+    /*     18, */
+    /*     // Data object type set to PRESSEC */
+    /*     0xE8, 0x01, 0x21, */
+    /*     0xD0, 0x03, 0xE1, 0xFC, LCSO_STATE_OPERATIONAL, // allow change LcsO < op */
+    /*     0xD1, 0x03, 0x70, 0xFC, LCSO_STATE_OPERATIONAL, // allow read LcsG < op */
+    /*     0xD3, 0x03, 0xE0, 0xFC, LCSO_STATE_OPERATIONAL, // allow exe LcsA < op */
+    /* }; */
+
+#define OPTIGA_DATA_OBJECT_ID_EXPERIMENT 0xF1DB
+    optiga_lib_status_t res;
+    /* res = _optiga_util_write_metadata_sync( */
+    /*     util, */
+    /*     OPTIGA_DATA_OBJECT_ID_EXPERIMENT, */
+    /*     metadata, */
+    /*     sizeof(metadata)); */
+    /* if (res != OPTIGA_LIB_SUCCESS) { */
+    /*     util_log("experiment metadata failed: %x", res); */
+    /*     return; */
+    /* } */
+    const uint8_t metadata_lcso[] = {
+        0x20,
+        3,
+        0xC0, 0x01, 0x07,
+    };
+
+    res = _optiga_util_write_metadata_sync(
+        util,
+        OPTIGA_DATA_OBJECT_ID_EXPERIMENT,
+        metadata_lcso,
+        sizeof(metadata_lcso));
+    if (res != OPTIGA_LIB_SUCCESS) {
+        util_log("experiment set lcso failed: %x", res);
+        return;
+    }
+
+
+    uint8_t data[32] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    (void)_optiga_util_read_data_sync;
+    res = _optiga_util_write_data_sync(
+        util,
+        OPTIGA_DATA_OBJECT_ID_EXPERIMENT,
+        OPTIGA_UTIL_ERASE_AND_WRITE,
+        0,
+        data,
+        sizeof(data));
+    if (res != OPTIGA_LIB_SUCCESS) {
+        util_log("experiment fail write data: %x", res);
+        return;
+    }
+
+    /* uint8_t msg[32] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"; */
+    /* uint8_t mac_out[32]; */
+    /* uint32_t mac_out_len = 32; */
+    /* res = _optiga_crypt_hmac_sync( */
+    /*     crypt, OPTIGA_HMAC_SHA_256, OPTIGA_DATA_OBJECT_ID_EXPERIMENT, msg, sizeof(msg), */
+    /*     mac_out, &mac_out_len); */
+    /* if (res != OPTIGA_LIB_SUCCESS) { */
+    /*     util_log("hmac experiemnt fail err=%x", res); */
+    /*     return; */
+    /* } */
+    /* util_log("hmac experiment: %d, %s", (int)mac_out_len, util_dbg_hex(mac_out, mac_out_len)); */
+
+
+    /* uint8_t data_lcs[1] = {0x01}; */
+    /* (void)_optiga_util_read_data_sync; */
+    /* res = _optiga_util_write_data_sync( */
+    /*     util, */
+    /*     0xF1C0, // LcsA */
+    /*     //0xE0C0, // LcsG */
+    /*     OPTIGA_UTIL_ERASE_AND_WRITE, */
+    /*     0, */
+    /*     data_lcs, */
+    /*     sizeof(data_lcs)); */
+    /* if (res != OPTIGA_LIB_SUCCESS) { */
+    /*     util_log("experiment fail LcsG: %x", res); */
+    /*     return; */
+    /* } */
+
+
+    /* memset(data, 0, sizeof(data)); */
+    /* uint16_t size = sizeof(data); */
+    /* res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_EXPERIMENT, 0, data, &size); */
+    /* if (res != OPTIGA_LIB_SUCCESS) { */
+    /*     util_log("experiment fail read data: %x", res); */
+    /*     return; */
+    /* } */
+    util_log("experiment ok");
 }
 
 static bool _write_config(void)
@@ -493,7 +595,7 @@ static bool _write_config(void)
         util,
         OPTIGA_DATA_OBJECT_ID_COUNTER0,
         OPTIGA_UTIL_ERASE_AND_WRITE,
-        ,0x
+        0,
         counter_buf,
         sizeof(counter_buf));
     if (res != OPTIGA_LIB_SUCCESS) {
@@ -520,6 +622,8 @@ static bool _write_config(void)
         return false;
     }
     util_log("write config OK");
+
+    _experiment_locks();
     return true;
 }
 
@@ -600,27 +704,27 @@ static bool _verify_config(void)
     if (res != OPTIGA_LIB_SUCCESS) {
         return false;
     }
-    uint8_t buf[8] = {0};
-    uint16_t size = sizeof(buf);
-    res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size);
-    if (res != OPTIGA_LIB_SUCCESS) {
-        return false;
-    }
-    util_log("CTR %d %x %x %x %x %x %x %x %x", size, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+    /* uint8_t buf[8] = {0}; */
+    /* uint16_t size = sizeof(buf); */
+    /* res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size); */
+    /* if (res != OPTIGA_LIB_SUCCESS) { */
+    /*     return false; */
+    /* } */
+    /* util_log("CTR %d %x %x %x %x %x %x %x %x", size, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]); */
 
-    uint8_t hmac[32] = {0};
-    uint8_t msg[32] = "\x20\x5c\x85\x01\x9f\x41\xe8\x8c\x54\x46\x26\x57\x01\x09\x1e\x46\x36\xb4\x3e\xb3\x98\xee\xad\x61\xad\x0f\x8c\x58\x93\xcd\xd4\x60";
-    if (securechip_kdf_rollkey(msg, 32, hmac) != 0) {
-        Abort("kdf fail");
-    }
-    util_log("hmac result: %s", util_dbg_hex(hmac, sizeof(hmac)));
+    /* uint8_t hmac[32] = {0}; */
+    /* uint8_t msg[32] = "\x20\x5c\x85\x01\x9f\x41\xe8\x8c\x54\x46\x26\x57\x01\x09\x1e\x46\x36\xb4\x3e\xb3\x98\xee\xad\x61\xad\x0f\x8c\x58\x93\xcd\xd4\x60"; */
+    /* if (securechip_kdf_rollkey(msg, 32, hmac) != 0) { */
+    /*     Abort("kdf fail"); */
+    /* } */
+    /* util_log("hmac result: %s", util_dbg_hex(hmac, sizeof(hmac))); */
 
-    size = sizeof(buf);
-    res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size);
-    if (res != OPTIGA_LIB_SUCCESS) {
-        return false;
-    }
-    util_log("CTR %d %x %x %x %x %x %x %x %x", size, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+    /* size = sizeof(buf); */
+    /* res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size); */
+    /* if (res != OPTIGA_LIB_SUCCESS) { */
+    /*     return false; */
+    /* } */
+    /* util_log("CTR %d %x %x %x %x %x %x %x %x", size, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]); */
 
 
     return true;
