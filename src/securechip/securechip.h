@@ -69,7 +69,7 @@ USE_RESULT int securechip_setup(const securechip_interface_functions_t* ifs);
 /**
  * Updates the two KDF keys (rollkey and kdf key). The previous keys are lost
  * and cannot be restored. Calling this function does not increment the
- * monotonic counter Counter0.
+ * monotonic counter.
  * @return true on success.
  */
 USE_RESULT bool securechip_update_keys(void);
@@ -108,7 +108,7 @@ USE_RESULT bool securechip_gen_attestation_key(uint8_t* pubkey_out);
 USE_RESULT bool securechip_attestation_sign(const uint8_t* challenge, uint8_t* signature_out);
 
 /**
- * Retrieves the number of remaining possible counter increments (max value - Counter0).
+ * Retrieves the number of remaining possible counter increments (max value - Counter).
  * The counter is increment when using `securechip_kdf()` (see its docstring).
  * @param[out] remaining_out current value of the monotonic counter.
  * @return false if there was a communication error with the SC.

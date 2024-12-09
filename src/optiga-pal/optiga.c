@@ -471,144 +471,6 @@ static optiga_lib_status_t _optiga_crypt_symmetric_generate_key_sync(
     return res;
 }
 
-bool optiga_monotonic_increments_remaining(uint32_t* remaining_out)
-{
-    uint8_t buf[4] = {0};
-    uint16_t size = sizeof(buf);
-    optiga_lib_status_t res =
-        _optiga_util_read_data_sync(_util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size);
-    if (res != OPTIGA_LIB_SUCCESS) {
-        return false;
-    }
-
-    uint32_t counter = optiga_common_get_uint32(buf);
-    if (counter > MONOTONIC_COUNTER_MAX_USE) {
-        Abort("optiga monotonic counter larget than max");
-    }
-    *remaining_out = MONOTONIC_COUNTER_MAX_USE - counter;
-    return true;
-}
-
-bool optiga_update_keys(void)
-{
-    ABORT_IF_NULL(_ifs);
-    ABORT_IF_NULL(_ifs->random_32_bytes);
-
-    uint8_t new_key[32] = {0};
-    _ifs->random_32_bytes(new_key);
-
-    optiga_lib_status_t res = _optiga_util_write_data_sync(
-        _util,
-        OPTIGA_DATA_OBJECT_ID_HMAC,
-        OPTIGA_UTIL_ERASE_AND_WRITE,
-        0x00,
-        new_key,
-        sizeof(new_key));
-    if (res != OPTIGA_UTIL_SUCCESS) {
-        return false;
-    }
-
-    optiga_key_id_t keyid = OPTIGA_KEY_ID_SECRET_BASED;
-    res = _optiga_crypt_symmetric_generate_key_sync(
-        _crypt, OPTIGA_SYMMETRIC_AES_256, OPTIGA_KEY_USAGE_ENCRYPTION, false, &keyid);
-    util_log("genkey: %x", res);
-
-    return res == OPTIGA_UTIL_SUCCESS;
-}
-
-/* static void _experiment_locks(void) */
-/* { */
-/*     /\* const uint8_t metadata[] = { *\/ */
-/*     /\*     0x20, *\/ */
-/*     /\*     18, *\/ */
-/*     /\*     // Data object type set to PRESSEC *\/ */
-/*     /\*     0xE8, 0x01, 0x21, *\/ */
-/*     /\*     0xD0, 0x03, 0xE1, 0xFC, LCSO_STATE_OPERATIONAL, // allow change LcsO < op *\/ */
-/*     /\*     0xD1, 0x03, 0x70, 0xFC, LCSO_STATE_OPERATIONAL, // allow read LcsG < op *\/ */
-/*     /\*     0xD3, 0x03, 0xE0, 0xFC, LCSO_STATE_OPERATIONAL, // allow exe LcsA < op *\/ */
-/*     /\* }; *\/ */
-
-/* #define OPTIGA_DATA_OBJECT_ID_EXPERIMENT 0xF1DB */
-/*     optiga_lib_status_t res; */
-/*     /\* res = _optiga_util_write_metadata_sync( *\/ */
-/*     /\*     util, *\/ */
-/*     /\*     OPTIGA_DATA_OBJECT_ID_EXPERIMENT, *\/ */
-/*     /\*     metadata, *\/ */
-/*     /\*     sizeof(metadata)); *\/ */
-/*     /\* if (res != OPTIGA_LIB_SUCCESS) { *\/ */
-/*     /\*     util_log("experiment metadata failed: %x", res); *\/ */
-/*     /\*     return; *\/ */
-/*     /\* } *\/ */
-/*     const uint8_t metadata_lcso[] = { */
-/*         0x20, */
-/*         3, */
-/*         0xC0, 0x01, 0x07, */
-/*     }; */
-
-/*     res = _optiga_util_write_metadata_sync( */
-/*         util, */
-/*         OPTIGA_DATA_OBJECT_ID_EXPERIMENT, */
-/*         metadata_lcso, */
-/*         sizeof(metadata_lcso)); */
-/*     if (res != OPTIGA_LIB_SUCCESS) { */
-/*         util_log("experiment set lcso failed: %x", res); */
-/*         return; */
-/*     } */
-
-/*     uint8_t data[32] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; */
-/*     (void)_optiga_util_read_data_sync; */
-/*     res = _optiga_util_write_data_sync( */
-/*         util, */
-/*         OPTIGA_DATA_OBJECT_ID_EXPERIMENT, */
-/*         OPTIGA_UTIL_ERASE_AND_WRITE, */
-/*         0, */
-/*         data, */
-/*         sizeof(data)); */
-/*     if (res != OPTIGA_LIB_SUCCESS) { */
-/*         util_log("experiment fail write data: %x", res); */
-/*         return; */
-/*     } */
-
-/*     /\* uint8_t msg[32] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"; *\/ */
-/*     /\* uint8_t mac_out[32]; *\/ */
-/*     /\* uint32_t mac_out_len = 32; *\/ */
-/*     /\* res = _optiga_crypt_hmac_sync( *\/ */
-/*     /\*     crypt, OPTIGA_HMAC_SHA_256, OPTIGA_DATA_OBJECT_ID_EXPERIMENT, msg, sizeof(msg), *\/
- */
-/*     /\*     mac_out, &mac_out_len); *\/ */
-/*     /\* if (res != OPTIGA_LIB_SUCCESS) { *\/ */
-/*     /\*     util_log("hmac experiemnt fail err=%x", res); *\/ */
-/*     /\*     return; *\/ */
-/*     /\* } *\/ */
-/*     /\* util_log("hmac experiment: %d, %s", (int)mac_out_len, util_dbg_hex(mac_out,
- * mac_out_len)); *\/ */
-
-/*     /\* uint8_t data_lcs[1] = {0x01}; *\/ */
-/*     /\* (void)_optiga_util_read_data_sync; *\/ */
-/*     /\* res = _optiga_util_write_data_sync( *\/ */
-/*     /\*     util, *\/ */
-/*     /\*     0xF1C0, // LcsA *\/ */
-/*     /\*     //0xE0C0, // LcsG *\/ */
-/*     /\*     OPTIGA_UTIL_ERASE_AND_WRITE, *\/ */
-/*     /\*     0, *\/ */
-/*     /\*     data_lcs, *\/ */
-/*     /\*     sizeof(data_lcs)); *\/ */
-/*     /\* if (res != OPTIGA_LIB_SUCCESS) { *\/ */
-/*     /\*     util_log("experiment fail LcsG: %x", res); *\/ */
-/*     /\*     return; *\/ */
-/*     /\* } *\/ */
-
-/*     /\* memset(data, 0, sizeof(data)); *\/ */
-/*     /\* uint16_t size = sizeof(data); *\/ */
-/*     /\* res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_EXPERIMENT, 0, data,
- * &size); *\/ */
-/*     /\* if (res != OPTIGA_LIB_SUCCESS) { *\/ */
-/*     /\*     util_log("experiment fail read data: %x", res); *\/ */
-/*     /\*     return; *\/ */
-/*     /\* } *\/ */
-/*     util_log("experiment ok"); */
-/* } */
-
 // Setup shielded communication.
 // Writes the shared secret to the chip 0xE140 data object and sets the metadata.
 // See solution reference manual 2.3.4 "Use case: Pair OPTIGA™ Trust M with host (pre-shared secret
@@ -721,13 +583,15 @@ static bool _write_arbitrary_data(const arbitrary_data_t* data)
     return true;
 }
 
-static bool _write_config(void)
+static bool _factory_write_config(void)
 {
     if (!_setup_shielded_communication()) {
         return false;
     }
 
-    // Configure AES secret key
+    //
+    // Configure AES key object
+    //
     optiga_lib_status_t res = _optiga_util_write_metadata_sync(
         _util, OPTIGA_DATA_OBJECT_ID_AES_SYMKEY, aes_symkey_metadata, sizeof(aes_symkey_metadata));
     if (res != OPTIGA_LIB_SUCCESS) {
@@ -785,9 +649,9 @@ static bool _write_config(void)
         return false;
     }
 
-    // TODO write counter metadata
-
-    // ECC slot metadata
+    //
+    // Configure attestation key object
+    //
     res = _optiga_util_write_metadata_sync(
         _util,
         OPTIGA_DATA_OBJECT_ID_ATTESTATION,
@@ -798,14 +662,8 @@ static bool _write_config(void)
         return false;
     }
 
-    // TODO debug, remove.
-    if (!optiga_update_keys()) {
-        util_log("update hmac key failed");
-        return false;
-    }
     util_log("write config OK");
 
-    /* _experiment_locks(); */
     return true;
 }
 
@@ -836,7 +694,7 @@ static bool _factory_setup(void)
         return false;
     }
 
-    if (!_write_config()) {
+    if (!_factory_write_config()) {
         return false;
     }
 
@@ -875,6 +733,7 @@ static bool _verify_config(void)
     OPTIGA_CRYPT_SET_COMMS_PROTOCOL_VERSION(
         _crypt, OPTIGA_COMMS_PROTOCOL_VERSION_PRE_SHARED_SECRET);
 
+    // Verify shielded connection is active.
     if (_crypt->protection_level != OPTIGA_COMMS_FULL_PROTECTION) {
         util_log("crypt protection level expected to be FULL");
         return false;
@@ -888,31 +747,8 @@ static bool _verify_config(void)
     if (res != OPTIGA_LIB_SUCCESS) {
         return false;
     }
-    /* uint8_t buf[8] = {0}; */
-    /* uint16_t size = sizeof(buf); */
-    /* res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size); */
-    /* if (res != OPTIGA_LIB_SUCCESS) { */
-    /*     return false; */
-    /* } */
-    /* util_log("CTR %d %x %x %x %x %x %x %x %x", size, buf[0], buf[1], buf[2], buf[3], buf[4],
-     * buf[5], buf[6], buf[7]); */
 
-    /* uint8_t hmac[32] = {0}; */
-    /* uint8_t msg[32] =
-     * "\x20\x5c\x85\x01\x9f\x41\xe8\x8c\x54\x46\x26\x57\x01\x09\x1e\x46\x36\xb4\x3e\xb3\x98\xee\xad\x61\xad\x0f\x8c\x58\x93\xcd\xd4\x60";
-     */
-    /* if (securechip_kdf_rollkey(msg, 32, hmac) != 0) { */
-    /*     Abort("kdf fail"); */
-    /* } */
-    /* util_log("hmac result: %s", util_dbg_hex(hmac, sizeof(hmac))); */
-
-    /* size = sizeof(buf); */
-    /* res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size); */
-    /* if (res != OPTIGA_LIB_SUCCESS) { */
-    /*     return false; */
-    /* } */
-    /* util_log("CTR %d %x %x %x %x %x %x %x %x", size, buf[0], buf[1], buf[2], buf[3], buf[4],
-     * buf[5], buf[6], buf[7]); */
+    // TODO: verify metadata of each configured object.
 
     return true;
 }
@@ -946,6 +782,56 @@ int optiga_setup(const securechip_interface_functions_t* ifs)
     return 0;
 }
 
+bool optiga_update_keys(void)
+{
+    ABORT_IF_NULL(_ifs);
+    ABORT_IF_NULL(_ifs->random_32_bytes);
+
+    uint8_t new_key[32] = {0};
+    _ifs->random_32_bytes(new_key);
+
+    optiga_lib_status_t res = _optiga_util_write_data_sync(
+        _util,
+        OPTIGA_DATA_OBJECT_ID_HMAC,
+        OPTIGA_UTIL_ERASE_AND_WRITE,
+        0x00,
+        new_key,
+        sizeof(new_key));
+    if (res != OPTIGA_UTIL_SUCCESS) {
+        return false;
+    }
+
+    optiga_key_id_t keyid = OPTIGA_KEY_ID_SECRET_BASED;
+    res = _optiga_crypt_symmetric_generate_key_sync(
+        _crypt, OPTIGA_SYMMETRIC_AES_256, OPTIGA_KEY_USAGE_ENCRYPTION, false, &keyid);
+    util_log("genkey: %x", res);
+
+    return res == OPTIGA_UTIL_SUCCESS;
+}
+
+int optiga_kdf_external(const uint8_t* msg, size_t len, uint8_t* mac_out)
+{
+    ABORT_IF_NULL(_crypt);
+    optiga_lib_status_t res;
+    // The equivalient of python `mac_out = hmac.new(key, msg[:len], hashlib.sha256).digest()`
+
+    uint32_t mac_out_len = 32;
+
+    (void)_optiga_crypt_hkdf_sync;
+
+    res = _optiga_crypt_hmac_sync(
+        _crypt, OPTIGA_HMAC_SHA_256, OPTIGA_DATA_OBJECT_ID_HMAC, msg, len, mac_out, &mac_out_len);
+    if (res != OPTIGA_LIB_SUCCESS) {
+        util_log("kdf fail err=%x", res);
+        return 1;
+    }
+    if (mac_out_len != 32) {
+        return 1;
+    }
+
+    return 0;
+}
+
 int optiga_kdf_internal(const uint8_t* msg, size_t len, uint8_t* kdf_out)
 {
     ABORT_IF_NULL(_crypt);
@@ -971,29 +857,6 @@ int optiga_kdf_internal(const uint8_t* msg, size_t len, uint8_t* kdf_out)
         return 1;
     }
     rust_sha256(mac_out, mac_out_len, kdf_out);
-
-    return 0;
-}
-
-int optiga_kdf_external(const uint8_t* msg, size_t len, uint8_t* mac_out)
-{
-    ABORT_IF_NULL(_crypt);
-    optiga_lib_status_t res;
-    // The equivalient of python `mac_out = hmac.new(key, msg[:len], hashlib.sha256).digest()`
-
-    uint32_t mac_out_len = 32;
-
-    (void)_optiga_crypt_hkdf_sync;
-
-    res = _optiga_crypt_hmac_sync(
-        _crypt, OPTIGA_HMAC_SHA_256, OPTIGA_DATA_OBJECT_ID_HMAC, msg, len, mac_out, &mac_out_len);
-    if (res != OPTIGA_LIB_SUCCESS) {
-        util_log("kdf fail err=%x", res);
-        return 1;
-    }
-    if (mac_out_len != 32) {
-        return 1;
-    }
 
     return 0;
 }
@@ -1043,6 +906,24 @@ bool optiga_attestation_sign(const uint8_t* challenge, uint8_t* signature_out)
     util_log("sign %d", sig_der_size);
     return rust_der_parse_optiga_signature(
         rust_util_bytes(sig_der, sig_der_size), rust_util_bytes_mut(signature_out, 64));
+}
+
+bool optiga_monotonic_increments_remaining(uint32_t* remaining_out)
+{
+    uint8_t buf[4] = {0};
+    uint16_t size = sizeof(buf);
+    optiga_lib_status_t res =
+        _optiga_util_read_data_sync(_util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size);
+    if (res != OPTIGA_LIB_SUCCESS) {
+        return false;
+    }
+
+    uint32_t counter = optiga_common_get_uint32(buf);
+    if (counter > MONOTONIC_COUNTER_MAX_USE) {
+        Abort("optiga monotonic counter larget than max");
+    }
+    *remaining_out = MONOTONIC_COUNTER_MAX_USE - counter;
+    return true;
 }
 
 // rand_out must be 32 bytes
