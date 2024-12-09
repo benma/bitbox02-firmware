@@ -15,15 +15,15 @@
 #ifndef _OPTIGA_H_
 #define _OPTIGA_H_
 
+/* Optiga Trust M implementation of the secure chip functions. */
+/* See securechip.h for the docstrings of the individual funtions. */
+
 #include "compiler_util.h"
 #include "securechip/securechip.h"
 #include <platform/platform_config.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-/* Optiga Trust M implementation of the secure chip functions. */
-/* See securechip.h for the docstrings of the individual funtions. */
 
 USE_RESULT int optiga_setup(const securechip_interface_functions_t* ifs);
 USE_RESULT bool optiga_update_keys(void);
@@ -40,4 +40,5 @@ USE_RESULT bool optiga_u2f_counter_set(uint32_t counter);
 USE_RESULT bool optiga_u2f_counter_inc(uint32_t* counter);
 #endif
 USE_RESULT bool optiga_model(securechip_model_t* model_out);
+
 #endif // _OPTIGA_H_

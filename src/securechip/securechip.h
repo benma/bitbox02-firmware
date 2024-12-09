@@ -22,17 +22,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef enum {
-    SC_ERR_ZONE_UNLOCKED_CONFIG = -1,
-    SC_ERR_ZONE_UNLOCKED_DATA = -2,
-    SC_ERR_CONFIG_MISMATCH = -3,
-    SC_ERR_SLOT_UNLOCKED_IO = -4,
-    SC_ERR_SLOT_UNLOCKED_AUTH = -5,
-    SC_ERR_SLOT_UNLOCKED_ENC = -6,
-    SC_ERR_IFS = -7,
-    SC_ERR_INVALID_ARGS = -8,
-} securechip_error_t;
-
 typedef struct {
     /**
      * @param[out] key_out must be of size 32
@@ -61,8 +50,9 @@ USE_RESULT bool securechip_init(void);
  * communication interface/bridge to cryptoauthlib. On first call, the chip
  * is configured and locked.
  * @param[in] ifs Interface functions.
- * @return values of `securechip_error_t` if negative, values of `ATCA_STATUS` if positive, 0 on
- * success.
+ * @return For ATECC: values of `atecc_error_t` if negative, values of `ATCA_STATUS` if positive, 0
+ * on success. For Optiga: valus of `optiga_error_t` if negative, values of
+ * optiga_lib_return_codes.h if positive, 0 on success.
  */
 USE_RESULT int securechip_setup(const securechip_interface_functions_t* ifs);
 
@@ -80,7 +70,9 @@ USE_RESULT bool securechip_update_keys(void);
  * @param[in] len Must be <= 127.
  * @param[out] kdf_out Must have size 32. Result of the kdf will be stored here.
  * Cannot be the same as `msg`.
- * @return values of `securechip_error_t` if negative, values of `ATCA_STATUS` if positive, 0 on
+ * @return For ATECC: values of `atecc_error_t` if negative, values of `ATCA_STATUS` if positive, 0
+ * on success. For Optiga: valus of `optiga_error_t` if negative, values of
+ * optiga_lib_return_codes.h if positive, 0 on success.
  */
 USE_RESULT int securechip_kdf(const uint8_t* msg, size_t len, uint8_t* kdf_out);
 
@@ -91,7 +83,9 @@ USE_RESULT int securechip_kdf(const uint8_t* msg, size_t len, uint8_t* kdf_out);
  * @param[in] len Must be <= 127.
  * @param[out] kdf_out Must have size 32. Result of the kdf will be stored here.
  * Cannot be the same as `msg`.
- * @return values of `securechip_error_t` if negative, values of `ATCA_STATUS` if positive, 0 on
+ * @return For ATECC: values of `atecc_error_t` if negative, values of `ATCA_STATUS` if positive, 0
+ * on success. For Optiga: valus of `optiga_error_t` if negative, values of
+ * optiga_lib_return_codes.h if positive, 0 on success.
  */
 USE_RESULT int securechip_kdf_rollkey(const uint8_t* msg, size_t len, uint8_t* kdf_out);
 
