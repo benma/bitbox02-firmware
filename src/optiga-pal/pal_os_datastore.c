@@ -43,7 +43,8 @@
 
 // While the binding shared secret is read using pal_os_datastore_read() by the optiga library,
 // we are suppoesd to store it manually using pal_os_datastore_write() during factory setup.
-// However, we use the memory io protection key for that, which is initialized during memory_setup().
+// However, we use the memory io protection key for that, which is initialized during
+// memory_setup().
 pal_status_t pal_os_datastore_write(uint16_t datastore_id, const uint8_t* p_buffer, uint16_t length)
 {
     (void)p_buffer;

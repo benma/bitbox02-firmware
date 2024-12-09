@@ -2,7 +2,6 @@
 #include "util.h"
 #include <stdint.h>
 
-
 void* pal_os_calloc(uint32_t number_of_blocks, uint32_t block_size)
 {
     return calloc(number_of_blocks, block_size);

@@ -21,10 +21,10 @@
 #include "memory/mpu.h"
 #include "memory/smarteeprom.h"
 #include "random.h"
+#include "rust/rust.h"
 #include "screen.h"
 #include "securechip/securechip.h"
 #include "util.h"
-#include "rust/rust.h"
 #include <wally_core.h>
 
 extern void __attribute__((noreturn)) __stack_chk_fail(void);

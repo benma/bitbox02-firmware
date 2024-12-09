@@ -215,7 +215,7 @@ int32_t pukcc_sha256_compute(const uint8_t* message, uint32_t message_len, uint8
     pukcc_self_test();
     return sha_sync_sha256_compute(
         &HASH_ALGORITHM_0,
-         &pukcc_sha256_context,
+        &pukcc_sha256_context,
         false, /* SHA256 mode */
         message,
         message_len,
