@@ -70,7 +70,6 @@ static void _optiga_lib_callback(void* callback_ctx, optiga_lib_status_t event)
 {
     (void)callback_ctx;
     _optiga_lib_status = event;
-    printf("optiga_lib_callback 0x%.3x\n", event);
 }
 
 // Helper that is used in the main thread to busy wait for the callback to update the shared
@@ -516,6 +515,7 @@ static int _setup_shielded_communication(void)
     return 0;
 }
 
+#if APP_U2F == 1 || FACTORYSETUP == 1
 static bool _read_arbitrary_data(arbitrary_data_t* data_out)
 {
     memset(data_out->bytes, 0x00, sizeof(data_out->bytes));
@@ -536,6 +536,7 @@ static bool _read_arbitrary_data(arbitrary_data_t* data_out)
     }
     return true;
 }
+#endif
 
 static int _write_arbitrary_data(const arbitrary_data_t* data)
 {
