@@ -25,6 +25,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef enum {
+    OPTIGA_ERR_CREATE = -1,
+    OPTIGA_ERR_CLOSE = -2,
+    OPTIGA_ERR_CONFIG_MISMATCH = -3,
+    OPTIGA_ERR_IFS = -4,
+    OPTIGA_ERR_UNEXPECTED_METADATA = -5,
+    OPTIGA_ERR_PAL = -6,
+    OPTIGA_ERR_UNEXPECTED_LEN = -7,
+    OPTIGA_ERR_INVALID_ARGS = -8,
+} optiga_error_t;
+
 USE_RESULT int optiga_setup(const securechip_interface_functions_t* ifs);
 USE_RESULT bool optiga_update_keys(void);
 USE_RESULT int optiga_kdf_external(const uint8_t* msg, size_t len, uint8_t* mac_out);
