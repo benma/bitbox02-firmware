@@ -31,9 +31,24 @@
 
 #define OPTIGA_DATA_OBJECT_ID_AES_SYMKEY 0xE200
 #define OPTIGA_DATA_OBJECT_ID_HMAC 0xF1D0
+#define OPTIGA_DATA_OBJECT_ID_ARBITRARY_DATA 0xF1D1
 #define OPTIGA_DATA_OBJECT_ID_ATTESTATION 0xE0F1
 #define OPTIGA_DATA_OBJECT_ID_PLATFORM_BINDING 0xE140
 #define OPTIGA_DATA_OBJECT_ID_COUNTER0 0xE120
+
+// See Solution Reference Manual Table "Data structure arbitrary data object".
+#define ARBITRARY_DATA_OBJECT_TYPE_3_MAX_SIZE 140
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpacked"
+#pragma GCC diagnostic ignored "-Wattributes"
+typedef union {
+    struct __attribute__((__packed__)) {
+        uint32_t u2f_counter;
+    } fields;
+    uint8_t bytes[ARBITRARY_DATA_OBJECT_TYPE_3_MAX_SIZE];
+} arbitrary_data_t;
+#pragma GCC diagnostic pop
 
 #define ABORT_IF_NULL(ptr)           \
     do {                             \
@@ -194,6 +209,33 @@ static const uint8_t hmac_metadata[] = {
     0xD3,
     0x01,
     0x00,
+};
+
+static const uint8_t arbitrary_data_metadata[] = {
+    // Metadata tag in the data object
+    0x20,
+    // Number of bytes that follow
+    15,
+    // Set LcsO. Refer to macro to see the value or some more notes.
+    0xC0,
+    0x01,
+    FINAL_LCSO_STATE,
+    // Data object type: BSTR (see Table 67 in Solution Reference Manual)
+    0xE8,
+    0x01,
+    0x00,
+    // Allow writes
+    0xD0,
+    0x01,
+    0x00,
+    // Allow reads
+    0xD1,
+    0x01,
+    0x00,
+    // Disallow exe
+    0xD3,
+    0x01,
+    0xFF,
 };
 
 //
@@ -642,6 +684,43 @@ static bool _setup_shielded_communication(void)
     return true;
 }
 
+static bool _read_arbitrary_data(arbitrary_data_t* data_out)
+{
+    memset(data_out->bytes, 0x00, sizeof(data_out->bytes));
+    uint16_t len = sizeof(data_out->bytes);
+    optiga_lib_status_t res = _optiga_util_read_data_sync(
+        _util, OPTIGA_DATA_OBJECT_ID_ARBITRARY_DATA, 0, data_out->bytes, &len);
+    if (res != OPTIGA_UTIL_SUCCESS) {
+        util_log("could not read arbitrary data: %x", res);
+        return false;
+    }
+    if (len != sizeof(data_out->bytes)) {
+        util_log(
+            "arbitary data: expected to read size %d, but read %d. Data read: %s",
+            (int)sizeof(data_out->bytes),
+            (int)len,
+            util_dbg_hex(data_out->bytes, len));
+        return false;
+    }
+    return true;
+}
+
+static bool _write_arbitrary_data(const arbitrary_data_t* data)
+{
+    optiga_lib_status_t res = _optiga_util_write_data_sync(
+        _util,
+        OPTIGA_DATA_OBJECT_ID_ARBITRARY_DATA,
+        OPTIGA_UTIL_ERASE_AND_WRITE,
+        0,
+        &data->bytes[0],
+        sizeof(data->bytes));
+    if (res != OPTIGA_LIB_SUCCESS) {
+        util_log("could not write arbitrary %x", res);
+        return false;
+    }
+    return true;
+}
+
 static bool _write_config(void)
 {
     if (!_setup_shielded_communication()) {
@@ -664,6 +743,26 @@ static bool _write_config(void)
         _util, OPTIGA_DATA_OBJECT_ID_HMAC, hmac_metadata, sizeof(hmac_metadata));
     if (res != OPTIGA_LIB_SUCCESS) {
         util_log("HMAC metadata failed: %x", res);
+        return false;
+    }
+
+    //
+    // Configure arbitrary data object
+    //
+    rust_log("Arbitrary data metadata");
+    res = _optiga_util_write_metadata_sync(
+        _util,
+        OPTIGA_DATA_OBJECT_ID_ARBITRARY_DATA,
+        arbitrary_data_metadata,
+        sizeof(arbitrary_data_metadata));
+    if (res != OPTIGA_LIB_SUCCESS) {
+        util_log("Arbitrary data metadata failed: %x", res);
+        return false;
+    }
+    // Initialize arbitrary data, all zeroes.
+    const arbitrary_data_t arbitrary_data = {0};
+    if (!_write_arbitrary_data(&arbitrary_data)) {
+        util_log("could not initialize arbitrary data");
         return false;
     }
 
@@ -834,14 +933,17 @@ int optiga_setup(const securechip_interface_functions_t* ifs)
 #if true // FACTORYSETUP == 1
     bool res = _factory_setup();
     if (!res) {
+        util_log("factory setup failed");
         return 1;
     }
 #endif
 
-    if (_verify_config()) {
-        return 0;
+    if (!_verify_config()) {
+        util_log("verify config failed");
+        return 1;
     }
-    return SC_ERR_INVALID_ARGS;
+
+    return 0;
 }
 
 int optiga_kdf_internal(const uint8_t* msg, size_t len, uint8_t* kdf_out)
@@ -953,6 +1055,31 @@ bool optiga_random(uint8_t* rand_out)
     }
     return true;
 }
+
+#if APP_U2F == 1 || FACTORYSETUP == 1
+bool optiga_u2f_counter_set(uint32_t counter)
+{
+    arbitrary_data_t data = {0};
+    if (!_read_arbitrary_data(&data)) {
+        return false;
+    }
+    data.fields.u2f_counter = counter;
+    return _write_arbitrary_data(&data);
+}
+#endif
+
+#if APP_U2F == 1
+bool optiga_u2f_counter_inc(uint32_t* counter)
+{
+    arbitrary_data_t data = {0};
+    if (!_read_arbitrary_data(&data)) {
+        return false;
+    }
+    data.fields.u2f_counter += 1;
+    *counter = data.fields.u2f_counter;
+    return _write_arbitrary_data(&data);
+}
+#endif
 
 bool optiga_model(securechip_model_t* model_out)
 {

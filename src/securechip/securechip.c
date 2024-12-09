@@ -51,6 +51,12 @@ bool securechip_init(void)
         _fns.attestation_sign = optiga_attestation_sign;
         _fns.monotonic_increments_remaining = optiga_monotonic_increments_remaining;
         _fns.random = optiga_random;
+#if APP_U2F == 1 || FACTORYSETUP == 1
+        _fns.u2f_counter_set = optiga_u2f_counter_set;
+#endif
+#if APP_U2F == 1
+        _fns.u2f_counter_inc = optiga_u2f_counter_inc;
+#endif
         _fns.model = optiga_model;
         break;
     case MEMORY_SECURECHIP_TYPE_ATECC:

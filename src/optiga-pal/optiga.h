@@ -14,7 +14,10 @@
 
 #ifndef _OPTIGA_H_
 #define _OPTIGA_H_
+
+#include "compiler_util.h"
 #include "securechip/securechip.h"
+#include <platform/platform_config.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -27,5 +30,11 @@ int optiga_kdf_internal(const uint8_t* msg, size_t len, uint8_t* mac_out);
 int optiga_kdf_external(const uint8_t* msg, size_t len, uint8_t* mac_out);
 bool optiga_gen_attestation_key(uint8_t* pubkey_out);
 bool optiga_attestation_sign(const uint8_t* challenge, uint8_t* signature_out);
+#if APP_U2F == 1 || FACTORYSETUP == 1
+USE_RESULT bool optiga_u2f_counter_set(uint32_t counter);
+#endif
+#if APP_U2F == 1
+USE_RESULT bool optiga_u2f_counter_inc(uint32_t* counter);
+#endif
 bool optiga_model(securechip_model_t* model_out);
 #endif // _OPTIGA_H_
