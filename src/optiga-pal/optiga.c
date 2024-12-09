@@ -89,75 +89,69 @@ static void optiga_lib_callback(void* callback_ctx, optiga_lib_status_t event)
 
 /* Platform Binding Shared Secret (0xE140) Metadata to be updated */
 const uint8_t platform_binding_shared_secret_metadata_final[] = {
-    // Metadata to be updated
+    // Metadata tag in the data object
     0x20,
-    0x13,
-    // LcsO
-    0xC0,
-    0x01,
-    FINAL_LCSO_STATE, // Refer Macro to see the value or some more notes
-    // Change/Write Access tag
-    0xD0,
-    0x03,
-    // This allows updating the binding secret when LcsO < op.
-    0xE1,
-    0xFC,
-    LCSO_STATE_OPERATIONAL, // LcsO < Operational state
-    // Read Access tag
-    0xD1,
-    0x03,
-    0xE1,
-    0xFC,
-    LCSO_STATE_OPERATIONAL, // LcsO < Operational state
-    // Execute Access tag
-    0xD3,
-    0x01,
-    0x00, // Always
-    // Data object Type
-    0xE8,
-    0x01,
-    0x22, // Platform binding secret type
+    // Number of bytes that follow
+    17,
+    // Set LcsO. Refer to macro to see the value or some more notes.
+    0xC0, 0x01, FINAL_LCSO_STATE,
+    // Change/Write access. This allows updating the binding secret when LcsO < op.
+    0xD0, 0x03, 0xE1, 0xFC, LCSO_STATE_OPERATIONAL,
+    // Disallow reads
+    0xD1, 0x01, 0xFF,
+    // Allow execute
+    0xD3, 0x01, 0x00,
+    // Data object type set to PTFBIND (Platform binding secret)
+    0xE8, 0x01, 0x22,
 };
 
 static const uint8_t e200_metadata[] = {
-    0x20,
-    11,
-    0xD0, 0x01, 0x00, // allow change
-    0xD1, 0x01, 0xFF, // disallow read
-    // Attach to counter at 0xE120
-    0xD3, 0x03, 0x40, 0xE1, 0x20,
-};
-
-static const uint8_t ecc_metadata[] = {
-    0x20,
-    12,
-    // Sign
-    0xE1, 0x01,0x10,
-    0xD0, 0x01, 0x00, //change
-    0xD1, 0x01, 0xFF, // disallow read
-    0xD3, 0x01, 0x00, // exe
-};
-
-/* static const uint8_t counter_metdata[] = { */
-/*     0x20, */
-/*     // TODO Len, */
-/*     0xE8, 0x01,  */
-/* }; */
-
-static const uint8_t hmac_metadata[] = {
     // Metadata tag in the data object
     0x20,
-    12,
-    // Data object type set to PRESSEC
-    0xE8,
-    0x01,
-    0x21,
+    // Number of bytes that follow
+    14,
+    // Set LcsO. Refer to macro to see the value or some more notes.
+    0xC0, 0x01, FINAL_LCSO_STATE,
     // Allow writes
     0xD0, 0x01, 0x00,
     // Disallow reads
     0xD1, 0x01, 0xFF,
-    // 0xD3, 0x01, 0x00,
-    0xD3, 0x01, 0x00, // exe
+    // Attach exeuction to counter at 0xE120
+    0xD3, 0x03, 0x40, 0xE1, 0x20,
+};
+
+static const uint8_t ecc_metadata[] = {
+    // Metadata tag in the data object
+    0x20,
+     // Number of bytes that follow
+    15,
+    // Set LcsO. Refer to macro to see the value or some more notes.
+    0xC0, 0x01, FINAL_LCSO_STATE,
+    // Key usage associated with key container: Sign (see Table 58 in Solution Reference Manual)
+    0xE1, 0x01, 0x10,
+    // Allow writes
+    0xD0, 0x01, 0x00,
+    // Disallow reads
+    0xD1, 0x01, 0xFF,
+    // Allow execution
+    0xD3, 0x01, 0x00,
+};
+
+static const uint8_t hmac_metadata[] = {
+    // Metadata tag in the data object
+    0x20,
+    // Number of bytes that follow
+    15,
+    // Set LcsO. Refer to macro to see the value or some more notes.
+    0xC0, 0x01, FINAL_LCSO_STATE,
+    // Data object type: PRESSEC (see Table 67 in Solution Reference Manual)
+    0xE8, 0x01, 0x21,
+    // Allow writes
+    0xD0, 0x01, 0x00,
+    // Disallow reads
+    0xD1, 0x01, 0xFF,
+    // Allow exe
+    0xD3, 0x01, 0x00,
 };
 
 //
@@ -179,19 +173,19 @@ static optiga_lib_status_t _optiga_util_read_data_sync(
     return res;
 }
 
-// static optiga_lib_status_t _optiga_util_read_metadata_sync(
-//     optiga_util_t* me,
-//     uint16_t optiga_oid,
-//     uint8_t* buffer,
-//     uint16_t* length)
-//{
-//     ABORT_IF_NULL(me);
-//
-//     optiga_lib_status = OPTIGA_LIB_BUSY;
-//     optiga_lib_status_t res = optiga_util_read_metadata(me, optiga_oid, buffer, length);
-//     _WAIT(res, optiga_lib_status);
-//     return res;
-// }
+static optiga_lib_status_t _optiga_util_read_metadata_sync(
+    optiga_util_t* me,
+    uint16_t optiga_oid,
+    uint8_t* buffer,
+    uint16_t* length)
+{
+    ABORT_IF_NULL(me);
+
+    optiga_lib_status = OPTIGA_LIB_BUSY;
+    optiga_lib_status_t res = optiga_util_read_metadata(me, optiga_oid, buffer, length);
+    _WAIT(res, optiga_lib_status);
+    return res;
+}
 
 static optiga_lib_status_t _optiga_util_write_data_sync(
     optiga_util_t* me,
@@ -398,7 +392,6 @@ bool optiga_update_keys(void)
 
     uint8_t new_key[32] = {0};
     _ifs->random_32_bytes(new_key);
-    //uint8_t new_key[32] = "\x7f\x72\x91\xc5\xe7\xb2\x9d\xa9\x04\x8e\x3c\xd7\xa7\x32\x7c\x6e\x1c\x0b\xa2\x7b\xef\xf6\x37\x75\x4d\xec\x40\x4b\x26\xc8\x27\xc7";
 
     optiga_lib_status_t res = _optiga_util_write_data_sync(
                util,
@@ -423,114 +416,137 @@ bool optiga_update_keys(void)
     return res == OPTIGA_UTIL_SUCCESS;
 }
 
-static void _experiment_locks(void)
-{
-    /* const uint8_t metadata[] = { */
-    /*     0x20, */
-    /*     18, */
-    /*     // Data object type set to PRESSEC */
-    /*     0xE8, 0x01, 0x21, */
-    /*     0xD0, 0x03, 0xE1, 0xFC, LCSO_STATE_OPERATIONAL, // allow change LcsO < op */
-    /*     0xD1, 0x03, 0x70, 0xFC, LCSO_STATE_OPERATIONAL, // allow read LcsG < op */
-    /*     0xD3, 0x03, 0xE0, 0xFC, LCSO_STATE_OPERATIONAL, // allow exe LcsA < op */
-    /* }; */
+/* static void _experiment_locks(void) */
+/* { */
+/*     /\* const uint8_t metadata[] = { *\/ */
+/*     /\*     0x20, *\/ */
+/*     /\*     18, *\/ */
+/*     /\*     // Data object type set to PRESSEC *\/ */
+/*     /\*     0xE8, 0x01, 0x21, *\/ */
+/*     /\*     0xD0, 0x03, 0xE1, 0xFC, LCSO_STATE_OPERATIONAL, // allow change LcsO < op *\/ */
+/*     /\*     0xD1, 0x03, 0x70, 0xFC, LCSO_STATE_OPERATIONAL, // allow read LcsG < op *\/ */
+/*     /\*     0xD3, 0x03, 0xE0, 0xFC, LCSO_STATE_OPERATIONAL, // allow exe LcsA < op *\/ */
+/*     /\* }; *\/ */
 
-#define OPTIGA_DATA_OBJECT_ID_EXPERIMENT 0xF1DB
+/* #define OPTIGA_DATA_OBJECT_ID_EXPERIMENT 0xF1DB */
+/*     optiga_lib_status_t res; */
+/*     /\* res = _optiga_util_write_metadata_sync( *\/ */
+/*     /\*     util, *\/ */
+/*     /\*     OPTIGA_DATA_OBJECT_ID_EXPERIMENT, *\/ */
+/*     /\*     metadata, *\/ */
+/*     /\*     sizeof(metadata)); *\/ */
+/*     /\* if (res != OPTIGA_LIB_SUCCESS) { *\/ */
+/*     /\*     util_log("experiment metadata failed: %x", res); *\/ */
+/*     /\*     return; *\/ */
+/*     /\* } *\/ */
+/*     const uint8_t metadata_lcso[] = { */
+/*         0x20, */
+/*         3, */
+/*         0xC0, 0x01, 0x07, */
+/*     }; */
+
+/*     res = _optiga_util_write_metadata_sync( */
+/*         util, */
+/*         OPTIGA_DATA_OBJECT_ID_EXPERIMENT, */
+/*         metadata_lcso, */
+/*         sizeof(metadata_lcso)); */
+/*     if (res != OPTIGA_LIB_SUCCESS) { */
+/*         util_log("experiment set lcso failed: %x", res); */
+/*         return; */
+/*     } */
+
+
+/*     uint8_t data[32] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; */
+/*     (void)_optiga_util_read_data_sync; */
+/*     res = _optiga_util_write_data_sync( */
+/*         util, */
+/*         OPTIGA_DATA_OBJECT_ID_EXPERIMENT, */
+/*         OPTIGA_UTIL_ERASE_AND_WRITE, */
+/*         0, */
+/*         data, */
+/*         sizeof(data)); */
+/*     if (res != OPTIGA_LIB_SUCCESS) { */
+/*         util_log("experiment fail write data: %x", res); */
+/*         return; */
+/*     } */
+
+/*     /\* uint8_t msg[32] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"; *\/ */
+/*     /\* uint8_t mac_out[32]; *\/ */
+/*     /\* uint32_t mac_out_len = 32; *\/ */
+/*     /\* res = _optiga_crypt_hmac_sync( *\/ */
+/*     /\*     crypt, OPTIGA_HMAC_SHA_256, OPTIGA_DATA_OBJECT_ID_EXPERIMENT, msg, sizeof(msg), *\/ */
+/*     /\*     mac_out, &mac_out_len); *\/ */
+/*     /\* if (res != OPTIGA_LIB_SUCCESS) { *\/ */
+/*     /\*     util_log("hmac experiemnt fail err=%x", res); *\/ */
+/*     /\*     return; *\/ */
+/*     /\* } *\/ */
+/*     /\* util_log("hmac experiment: %d, %s", (int)mac_out_len, util_dbg_hex(mac_out, mac_out_len)); *\/ */
+
+
+/*     /\* uint8_t data_lcs[1] = {0x01}; *\/ */
+/*     /\* (void)_optiga_util_read_data_sync; *\/ */
+/*     /\* res = _optiga_util_write_data_sync( *\/ */
+/*     /\*     util, *\/ */
+/*     /\*     0xF1C0, // LcsA *\/ */
+/*     /\*     //0xE0C0, // LcsG *\/ */
+/*     /\*     OPTIGA_UTIL_ERASE_AND_WRITE, *\/ */
+/*     /\*     0, *\/ */
+/*     /\*     data_lcs, *\/ */
+/*     /\*     sizeof(data_lcs)); *\/ */
+/*     /\* if (res != OPTIGA_LIB_SUCCESS) { *\/ */
+/*     /\*     util_log("experiment fail LcsG: %x", res); *\/ */
+/*     /\*     return; *\/ */
+/*     /\* } *\/ */
+
+
+/*     /\* memset(data, 0, sizeof(data)); *\/ */
+/*     /\* uint16_t size = sizeof(data); *\/ */
+/*     /\* res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_EXPERIMENT, 0, data, &size); *\/ */
+/*     /\* if (res != OPTIGA_LIB_SUCCESS) { *\/ */
+/*     /\*     util_log("experiment fail read data: %x", res); *\/ */
+/*     /\*     return; *\/ */
+/*     /\* } *\/ */
+/*     util_log("experiment ok"); */
+/* } */
+
+// Setup shielded communication.
+// Writes the shared secret to the chip 0xE140 data object and sets the metadata.
+// See solution reference manual 2.3.4 "Use case: Pair OPTIGA™ Trust M with host (pre-shared secret based)".
+static bool _setup_shielded_communication(void)
+{
     optiga_lib_status_t res;
-    /* res = _optiga_util_write_metadata_sync( */
-    /*     util, */
-    /*     OPTIGA_DATA_OBJECT_ID_EXPERIMENT, */
-    /*     metadata, */
-    /*     sizeof(metadata)); */
-    /* if (res != OPTIGA_LIB_SUCCESS) { */
-    /*     util_log("experiment metadata failed: %x", res); */
-    /*     return; */
-    /* } */
-    const uint8_t metadata_lcso[] = {
-        0x20,
-        3,
-        0xC0, 0x01, 0x07,
-    };
 
-    res = _optiga_util_write_metadata_sync(
-        util,
-        OPTIGA_DATA_OBJECT_ID_EXPERIMENT,
-        metadata_lcso,
-        sizeof(metadata_lcso));
+    uint8_t current_metadata[1000] = {0};
+    uint16_t current_metadata_size = sizeof(current_metadata);
+
+    res = _optiga_util_read_metadata_sync(
+            util,
+            OPTIGA_DATA_OBJECT_ID_PLATFORM_BINDING,
+            current_metadata,
+            &current_metadata_size);
     if (res != OPTIGA_LIB_SUCCESS) {
-        util_log("experiment set lcso failed: %x", res);
-        return;
+        util_log("fail: read binding secret metadata: %x", res);
+        return false;
+    }
+    util_log("current shared secret metadata: %s", util_dbg_hex(current_metadata, current_metadata_size));
+    // Check that the LcsO metadata tag (0xC0 0x01 LCSO) is present, as we want to read the current
+    // LcsO.
+    if (current_metadata_size < 5 || current_metadata[0] != 0x20 || current_metadata[2] != 0xC0 || current_metadata[3] != 0x01) {
+        util_log("unexpected shared secret metadata bytes");
+        return false;
     }
 
-
-    uint8_t data[32] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    (void)_optiga_util_read_data_sync;
-    res = _optiga_util_write_data_sync(
-        util,
-        OPTIGA_DATA_OBJECT_ID_EXPERIMENT,
-        OPTIGA_UTIL_ERASE_AND_WRITE,
-        0,
-        data,
-        sizeof(data));
-    if (res != OPTIGA_LIB_SUCCESS) {
-        util_log("experiment fail write data: %x", res);
-        return;
+    if (current_metadata[4] >= LCSO_STATE_OPERATIONAL) {
+        util_log("shared secret already setup");
+        return true;
     }
-
-    /* uint8_t msg[32] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"; */
-    /* uint8_t mac_out[32]; */
-    /* uint32_t mac_out_len = 32; */
-    /* res = _optiga_crypt_hmac_sync( */
-    /*     crypt, OPTIGA_HMAC_SHA_256, OPTIGA_DATA_OBJECT_ID_EXPERIMENT, msg, sizeof(msg), */
-    /*     mac_out, &mac_out_len); */
-    /* if (res != OPTIGA_LIB_SUCCESS) { */
-    /*     util_log("hmac experiemnt fail err=%x", res); */
-    /*     return; */
-    /* } */
-    /* util_log("hmac experiment: %d, %s", (int)mac_out_len, util_dbg_hex(mac_out, mac_out_len)); */
-
-
-    /* uint8_t data_lcs[1] = {0x01}; */
-    /* (void)_optiga_util_read_data_sync; */
-    /* res = _optiga_util_write_data_sync( */
-    /*     util, */
-    /*     0xF1C0, // LcsA */
-    /*     //0xE0C0, // LcsG */
-    /*     OPTIGA_UTIL_ERASE_AND_WRITE, */
-    /*     0, */
-    /*     data_lcs, */
-    /*     sizeof(data_lcs)); */
-    /* if (res != OPTIGA_LIB_SUCCESS) { */
-    /*     util_log("experiment fail LcsG: %x", res); */
-    /*     return; */
-    /* } */
-
-
-    /* memset(data, 0, sizeof(data)); */
-    /* uint16_t size = sizeof(data); */
-    /* res = _optiga_util_read_data_sync(util, OPTIGA_DATA_OBJECT_ID_EXPERIMENT, 0, data, &size); */
-    /* if (res != OPTIGA_LIB_SUCCESS) { */
-    /*     util_log("experiment fail read data: %x", res); */
-    /*     return; */
-    /* } */
-    util_log("experiment ok");
-}
-
-static bool _write_config(void)
-{
-    //
-    // Write platform binding secret to securechip
-    //
 
     uint8_t platform_binding_secret[32];
-    uint16_t len = sizeof(platform_binding_secret);
-    optiga_lib_status_t res;
-    pal_status_t pal_res;
+    uint16_t platform_binding_secret_size = sizeof(platform_binding_secret);
 
-    pal_res = pal_os_datastore_read(
-        OPTIGA_PLATFORM_BINDING_SHARED_SECRET_ID, platform_binding_secret, &len);
-
-    if (PAL_STATUS_SUCCESS != pal_res) {
+    pal_status_t pal_res = pal_os_datastore_read(
+        OPTIGA_PLATFORM_BINDING_SHARED_SECRET_ID, platform_binding_secret, &platform_binding_secret_size);
+    if (PAL_STATUS_SUCCESS != pal_res || platform_binding_secret_size != sizeof(platform_binding_secret)) {
         util_log("failed datastore read: %x", pal_res);
         return false;
     }
@@ -546,7 +562,7 @@ static bool _write_config(void)
         platform_binding_secret,
         sizeof(platform_binding_secret));
     if (res != OPTIGA_LIB_SUCCESS) {
-        util_log("fail:write binding secret to chip: %x", res);
+        util_log("fail: write binding secret to chip: %x", res);
         return false;
     }
 
@@ -561,8 +577,17 @@ static bool _write_config(void)
         return false;
     }
 
+    return true;
+}
+
+static bool _write_config(void)
+{
+    if (!_setup_shielded_communication()) {
+        return false;
+    }
+
     // Configure AES secret key
-    res = _optiga_util_write_metadata_sync(
+    optiga_lib_status_t res = _optiga_util_write_metadata_sync(
         util,
         OPTIGA_DATA_OBJECT_ID_AES_SYMKEY,
         e200_metadata,
@@ -623,7 +648,7 @@ static bool _write_config(void)
     }
     util_log("write config OK");
 
-    _experiment_locks();
+    /* _experiment_locks(); */
     return true;
 }
 
