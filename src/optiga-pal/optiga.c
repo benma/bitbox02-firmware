@@ -29,16 +29,32 @@
 // indication of 600000 updates. See Solution Reference Manual Figure 32.
 #define MONOTONIC_COUNTER_MAX_USE (590000)
 
-#define OPTIGA_DATA_OBJECT_ID_AES_SYMKEY 0xE200
-#define OPTIGA_DATA_OBJECT_ID_HMAC 0xF1D0
-#define OPTIGA_DATA_OBJECT_ID_ARBITRARY_DATA 0xF1D1
-#define OPTIGA_DATA_OBJECT_ID_ATTESTATION 0xE0F1
-#define OPTIGA_DATA_OBJECT_ID_PLATFORM_BINDING 0xE140
-#define OPTIGA_DATA_OBJECT_ID_COUNTER0 0xE120
+// The Data Object IDs we use.
+
+// Stores a shared secret used for a shielded connection. Is is used to encrypt
+// communications. Read/write disabled.
+#define OID_PLATFORM_BINDING 0xE140
+// CMAC key slot, read/write prohibited. Used to perform KDF using CMAC. Key is regenerated at
+// factory setup and with each device reset. Monotonic counter `OID_COUNTER0` attached.
+#define OID_AES_SYMKEY 0xE200
+// HMAC key slot, read prohibited, write allowed. 32 random bytes are written to it at factory setup
+// and with each device reset.
+#define OID_HMAC 0xF1D0
+// Arbitrary data object, stores up to 140 bytes. Used to store the U2F counter.
+#define OID_ARBITRARY_DATA 0xF1D1
+// ECC slot used for creating the device attestation key and signing with it. Read/write
+// disabled. The Key is internally generated at factory setup and used to sign the device
+// attestation host challenge.
+#define OID_ATTESTATION 0xE0F1
+// Monotonic counter, initialized at 0 and attached to `OID_AES_SYMKEY` - every CMAC generation
+// increments the counter. When the threshld `MONOTONIC_COUNTER_MAX_USE` is reached, further CMAC
+// computations return an error.
+#define OID_COUNTER0 0xE120
 
 // See Solution Reference Manual Table "Data structure arbitrary data object".
 #define ARBITRARY_DATA_OBJECT_TYPE_3_MAX_SIZE 140
 
+// Struct stored in the arbitrary data object.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpacked"
 #pragma GCC diagnostic ignored "-Wattributes"
@@ -62,47 +78,23 @@ static optiga_crypt_t* _crypt;
 
 static const securechip_interface_functions_t* _ifs = NULL;
 
-// The OPTIGA library is asynchronous and will schedule a callback when the command is done. The
-// callback will set this shared variable to the result of the command.
-static volatile optiga_lib_status_t _optiga_lib_status;
-
-static void _optiga_lib_callback(void* callback_ctx, optiga_lib_status_t event)
-{
-    (void)callback_ctx;
-    _optiga_lib_status = event;
-}
-
-// Helper that is used in the main thread to busy wait for the callback to update the shared
-// variable.
-// It first checks the return status of the command, then busy waits, and then checks the
-// asynchronous return status.
-// Will return from caller if command failed.
-// `return_status` will be updated with the actual return status
-// Return statuses are documented in optiga_lib_return_codes.h
-#define _WAIT(return_status, optiga_lib_status)          \
-    do {                                                 \
-        if ((return_status) != OPTIGA_UTIL_SUCCESS) {    \
-            return (return_status);                      \
-        }                                                \
-        while (OPTIGA_LIB_BUSY == (optiga_lib_status)) { \
-        }                                                \
-        if (OPTIGA_LIB_SUCCESS != (optiga_lib_status)) { \
-            return (optiga_lib_status);                  \
-        }                                                \
-        (return_status) = (optiga_lib_status);           \
-    } while (0)
-
-// Value of Operational state
+// Value of Creation state. See Table 74 in the Solution Reference Manual.
 #define LCSO_STATE_CREATION (0x01)
-// Value of Operational state
+// Value of Operational state. See Table 74 in the Solution Reference Manual.
 #define LCSO_STATE_OPERATIONAL (0x07)
 
 // Currently set to Creation state(defualt value). At the real time/customer side this needs to be
 // LCSO_STATE_OPERATIONAL (0x07)
 #define FINAL_LCSO_STATE (LCSO_STATE_CREATION)
 
-/* Platform Binding Shared Secret (0xE140) Metadata to be updated */
-const uint8_t platform_binding_metadata[] = {
+// Set this to 1 for a more convenience during development.
+// Factory setup will be performed in the normal firmware, which makes it easier to tinker with the
+// chip setup and config.
+// Must be 0 for the production firmware releases.
+#define FACTORY_DURING_PROD 1
+
+#if FACTORYSETUP == 1 || FACTORY_DURING_PROD == 1
+static const uint8_t _platform_binding_metadata[] = {
     // Metadata tag in the data object
     0x20,
     // Number of bytes that follow
@@ -131,7 +123,7 @@ const uint8_t platform_binding_metadata[] = {
     0x22,
 };
 
-static const uint8_t aes_symkey_metadata[] = {
+static const uint8_t _aes_symkey_metadata[] = {
     // Metadata tag in the data object
     0x20,
     // Number of bytes that follow
@@ -168,7 +160,7 @@ static const uint8_t aes_symkey_metadata[] = {
     0x40,
 };
 
-static const uint8_t attestation_metadata[] = {
+static const uint8_t _attestation_metadata[] = {
     // Metadata tag in the data object
     0x20,
     // Number of bytes that follow
@@ -202,7 +194,7 @@ static const uint8_t attestation_metadata[] = {
     0x40,
 };
 
-static const uint8_t hmac_metadata[] = {
+static const uint8_t _hmac_metadata[] = {
     // Metadata tag in the data object
     0x20,
     // Number of bytes that follow
@@ -234,7 +226,7 @@ static const uint8_t hmac_metadata[] = {
     0x40,
 };
 
-static const uint8_t arbitrary_data_metadata[] = {
+static const uint8_t _arbitrary_data_metadata[] = {
     // Metadata tag in the data object
     0x20,
     // Number of bytes that follow
@@ -264,10 +256,41 @@ static const uint8_t arbitrary_data_metadata[] = {
     0x01,
     0xFF,
 };
+#endif
 
 //
 // Sync wrappers around optiga util/crypt functions
 //
+
+// The OPTIGA library is asynchronous and will schedule a callback when the command is done. The
+// callback will set this shared variable to the result of the command.
+static volatile optiga_lib_status_t _optiga_lib_status;
+
+static void _optiga_lib_callback(void* callback_ctx, optiga_lib_status_t event)
+{
+    (void)callback_ctx;
+    _optiga_lib_status = event;
+}
+
+// Helper that is used in the main thread to busy wait for the callback to update the shared
+// variable.
+// It first checks the return status of the command, then busy waits, and then checks the
+// asynchronous return status.
+// Will return from caller if command failed.
+// `return_status` will be updated with the actual return status
+// Return statuses are documented in optiga_lib_return_codes.h
+#define _WAIT(return_status, optiga_lib_status)          \
+    do {                                                 \
+        if ((return_status) != OPTIGA_UTIL_SUCCESS) {    \
+            return (return_status);                      \
+        }                                                \
+        while (OPTIGA_LIB_BUSY == (optiga_lib_status)) { \
+        }                                                \
+        if (OPTIGA_LIB_SUCCESS != (optiga_lib_status)) { \
+            return (optiga_lib_status);                  \
+        }                                                \
+        (return_status) = (optiga_lib_status);           \
+    } while (0)
 
 static optiga_lib_status_t _optiga_util_read_data_sync(
     optiga_util_t* me,
@@ -280,20 +303,6 @@ static optiga_lib_status_t _optiga_util_read_data_sync(
 
     _optiga_lib_status = OPTIGA_LIB_BUSY;
     optiga_lib_status_t res = optiga_util_read_data(me, optiga_oid, offset, buffer, length);
-    _WAIT(res, _optiga_lib_status);
-    return res;
-}
-
-static optiga_lib_status_t _optiga_util_read_metadata_sync(
-    optiga_util_t* me,
-    uint16_t optiga_oid,
-    uint8_t* buffer,
-    uint16_t* length)
-{
-    ABORT_IF_NULL(me);
-
-    _optiga_lib_status = OPTIGA_LIB_BUSY;
-    optiga_lib_status_t res = optiga_util_read_metadata(me, optiga_oid, buffer, length);
     _WAIT(res, _optiga_lib_status);
     return res;
 }
@@ -315,6 +324,21 @@ static optiga_lib_status_t _optiga_util_write_data_sync(
     return res;
 }
 
+#if FACTORYSETUP == 1 || FACTORY_DURING_PROD == 1
+static optiga_lib_status_t _optiga_util_read_metadata_sync(
+    optiga_util_t* me,
+    uint16_t optiga_oid,
+    uint8_t* buffer,
+    uint16_t* length)
+{
+    ABORT_IF_NULL(me);
+
+    _optiga_lib_status = OPTIGA_LIB_BUSY;
+    optiga_lib_status_t res = optiga_util_read_metadata(me, optiga_oid, buffer, length);
+    _WAIT(res, _optiga_lib_status);
+    return res;
+}
+
 static optiga_lib_status_t _optiga_util_write_metadata_sync(
     optiga_util_t* me,
     uint16_t optiga_oid,
@@ -328,6 +352,7 @@ static optiga_lib_status_t _optiga_util_write_metadata_sync(
     _WAIT(res, _optiga_lib_status);
     return res;
 }
+#endif
 
 static optiga_lib_status_t _optiga_util_open_application_sync(
     optiga_util_t* me,
@@ -341,6 +366,7 @@ static optiga_lib_status_t _optiga_util_open_application_sync(
     return res;
 }
 
+#if FACTORYSETUP == 1 || FACTORY_DURING_PROD == 1
 static optiga_lib_status_t _optiga_util_close_application_sync(
     optiga_util_t* me,
     bool_t perform_hibernate)
@@ -352,6 +378,7 @@ static optiga_lib_status_t _optiga_util_close_application_sync(
     _WAIT(res, _optiga_lib_status);
     return res;
 }
+#endif
 
 static optiga_lib_status_t _optiga_crypt_hmac_sync(
     optiga_crypt_t* me,
@@ -468,6 +495,46 @@ static optiga_lib_status_t _optiga_crypt_symmetric_generate_key_sync(
     return res;
 }
 
+#if APP_U2F == 1 || FACTORYSETUP == 1
+static bool _read_arbitrary_data(arbitrary_data_t* data_out)
+{
+    memset(data_out->bytes, 0x00, sizeof(data_out->bytes));
+    uint16_t len = sizeof(data_out->bytes);
+    optiga_lib_status_t res =
+        _optiga_util_read_data_sync(_util, OID_ARBITRARY_DATA, 0, data_out->bytes, &len);
+    if (res != OPTIGA_UTIL_SUCCESS) {
+        util_log("could not read arbitrary data: %x", res);
+        return false;
+    }
+    if (len != sizeof(data_out->bytes)) {
+        util_log(
+            "arbitary data: expected to read size %d, but read %d. Data read: %s",
+            (int)sizeof(data_out->bytes),
+            (int)len,
+            util_dbg_hex(data_out->bytes, len));
+        return false;
+    }
+    return true;
+}
+#endif
+
+static int _write_arbitrary_data(const arbitrary_data_t* data)
+{
+    optiga_lib_status_t res = _optiga_util_write_data_sync(
+        _util,
+        OID_ARBITRARY_DATA,
+        OPTIGA_UTIL_ERASE_AND_WRITE,
+        0,
+        &data->bytes[0],
+        sizeof(data->bytes));
+    if (res != OPTIGA_LIB_SUCCESS) {
+        util_log("could not write arbitrary %x", res);
+        return res;
+    }
+    return 0;
+}
+
+#if FACTORYSETUP == 1 || FACTORY_DURING_PROD == 1
 // Setup shielded communication.
 // Writes the shared secret to the chip 0xE140 data object and sets the metadata.
 // See solution reference manual 2.3.4 "Use case: Pair OPTIGA™ Trust M with host (pre-shared secret
@@ -480,7 +547,7 @@ static int _setup_shielded_communication(void)
     uint16_t current_metadata_size = sizeof(current_metadata);
 
     res = _optiga_util_read_metadata_sync(
-        _util, OPTIGA_DATA_OBJECT_ID_PLATFORM_BINDING, current_metadata, &current_metadata_size);
+        _util, OID_PLATFORM_BINDING, current_metadata, &current_metadata_size);
     if (res != OPTIGA_LIB_SUCCESS) {
         util_log("fail: read binding secret metadata: %x", res);
         return res;
@@ -518,7 +585,7 @@ static int _setup_shielded_communication(void)
     // slot.
     res = _optiga_util_write_data_sync(
         _util,
-        OPTIGA_DATA_OBJECT_ID_PLATFORM_BINDING,
+        OID_PLATFORM_BINDING,
         OPTIGA_UTIL_ERASE_AND_WRITE,
         0,
         platform_binding_secret,
@@ -531,53 +598,14 @@ static int _setup_shielded_communication(void)
     OPTIGA_UTIL_SET_COMMS_PROTECTION_LEVEL(_util, OPTIGA_COMMS_NO_PROTECTION);
     res = _optiga_util_write_metadata_sync(
         _util,
-        OPTIGA_DATA_OBJECT_ID_PLATFORM_BINDING,
-        platform_binding_metadata,
-        sizeof(platform_binding_metadata));
+        OID_PLATFORM_BINDING,
+        _platform_binding_metadata,
+        sizeof(_platform_binding_metadata));
     if (res != OPTIGA_LIB_SUCCESS) {
         util_log("fail: write metadata of platform binding: %x", res);
         return res;
     }
 
-    return 0;
-}
-
-#if APP_U2F == 1 || FACTORYSETUP == 1
-static bool _read_arbitrary_data(arbitrary_data_t* data_out)
-{
-    memset(data_out->bytes, 0x00, sizeof(data_out->bytes));
-    uint16_t len = sizeof(data_out->bytes);
-    optiga_lib_status_t res = _optiga_util_read_data_sync(
-        _util, OPTIGA_DATA_OBJECT_ID_ARBITRARY_DATA, 0, data_out->bytes, &len);
-    if (res != OPTIGA_UTIL_SUCCESS) {
-        util_log("could not read arbitrary data: %x", res);
-        return false;
-    }
-    if (len != sizeof(data_out->bytes)) {
-        util_log(
-            "arbitary data: expected to read size %d, but read %d. Data read: %s",
-            (int)sizeof(data_out->bytes),
-            (int)len,
-            util_dbg_hex(data_out->bytes, len));
-        return false;
-    }
-    return true;
-}
-#endif
-
-static int _write_arbitrary_data(const arbitrary_data_t* data)
-{
-    optiga_lib_status_t res = _optiga_util_write_data_sync(
-        _util,
-        OPTIGA_DATA_OBJECT_ID_ARBITRARY_DATA,
-        OPTIGA_UTIL_ERASE_AND_WRITE,
-        0,
-        &data->bytes[0],
-        sizeof(data->bytes));
-    if (res != OPTIGA_LIB_SUCCESS) {
-        util_log("could not write arbitrary %x", res);
-        return res;
-    }
     return 0;
 }
 
@@ -592,7 +620,7 @@ static int _factory_write_config(void)
     // Configure AES key object
     //
     optiga_lib_status_t res = _optiga_util_write_metadata_sync(
-        _util, OPTIGA_DATA_OBJECT_ID_AES_SYMKEY, aes_symkey_metadata, sizeof(aes_symkey_metadata));
+        _util, OID_AES_SYMKEY, _aes_symkey_metadata, sizeof(_aes_symkey_metadata));
     if (res != OPTIGA_LIB_SUCCESS) {
         util_log("e200 metadata update failed: %x", res);
         return res;
@@ -602,8 +630,7 @@ static int _factory_write_config(void)
     // Configure HMAC data object
     //
     rust_log("HMAC metadata");
-    res = _optiga_util_write_metadata_sync(
-        _util, OPTIGA_DATA_OBJECT_ID_HMAC, hmac_metadata, sizeof(hmac_metadata));
+    res = _optiga_util_write_metadata_sync(_util, OID_HMAC, _hmac_metadata, sizeof(_hmac_metadata));
     if (res != OPTIGA_LIB_SUCCESS) {
         util_log("HMAC metadata failed: %x", res);
         return res;
@@ -614,10 +641,7 @@ static int _factory_write_config(void)
     //
     rust_log("Arbitrary data metadata");
     res = _optiga_util_write_metadata_sync(
-        _util,
-        OPTIGA_DATA_OBJECT_ID_ARBITRARY_DATA,
-        arbitrary_data_metadata,
-        sizeof(arbitrary_data_metadata));
+        _util, OID_ARBITRARY_DATA, _arbitrary_data_metadata, sizeof(_arbitrary_data_metadata));
     if (res != OPTIGA_LIB_SUCCESS) {
         util_log("Arbitrary data metadata failed: %x", res);
         return res;
@@ -638,12 +662,7 @@ static int _factory_write_config(void)
     uint8_t counter_buf[8] = {0};
     optiga_common_set_uint32(&counter_buf[4], MONOTONIC_COUNTER_MAX_USE);
     res = _optiga_util_write_data_sync(
-        _util,
-        OPTIGA_DATA_OBJECT_ID_COUNTER0,
-        OPTIGA_UTIL_ERASE_AND_WRITE,
-        0,
-        counter_buf,
-        sizeof(counter_buf));
+        _util, OID_COUNTER0, OPTIGA_UTIL_ERASE_AND_WRITE, 0, counter_buf, sizeof(counter_buf));
     if (res != OPTIGA_LIB_SUCCESS) {
         util_log("fail: write initial counter data %x", res);
         return res;
@@ -653,10 +672,7 @@ static int _factory_write_config(void)
     // Configure attestation key object
     //
     res = _optiga_util_write_metadata_sync(
-        _util,
-        OPTIGA_DATA_OBJECT_ID_ATTESTATION,
-        attestation_metadata,
-        sizeof(attestation_metadata));
+        _util, OID_ATTESTATION, _attestation_metadata, sizeof(_attestation_metadata));
     if (res != OPTIGA_LIB_SUCCESS) {
         util_log("ECC metadata update failed: %x", res);
         return res;
@@ -701,7 +717,7 @@ static int _factory_setup(void)
 
     res = _optiga_util_close_application_sync(_util, 0);
     if (res != OPTIGA_LIB_SUCCESS) {
-        return OPTIGA_ERR_CLOSE;
+        return res;
     }
 
     if (NULL != _crypt) {
@@ -716,19 +732,11 @@ static int _factory_setup(void)
 
     return 0;
 }
+#endif
 
 static bool _verify_config(void)
 {
     optiga_lib_status_t res;
-    _util = optiga_util_create(OPTIGA_INSTANCE_ID_0, _optiga_lib_callback, NULL);
-    if (NULL == _util) {
-        return false;
-    }
-
-    _crypt = optiga_crypt_create(OPTIGA_INSTANCE_ID_0, _optiga_lib_callback, NULL);
-    if (NULL == _crypt) {
-        return false;
-    }
 
     OPTIGA_UTIL_SET_COMMS_PROTOCOL_VERSION(_util, OPTIGA_COMMS_PROTOCOL_VERSION_PRE_SHARED_SECRET);
     OPTIGA_CRYPT_SET_COMMS_PROTOCOL_VERSION(
@@ -767,13 +775,23 @@ int optiga_setup(const securechip_interface_functions_t* ifs)
     // event loop
     pal_timer_init();
 
-#if true // FACTORYSETUP == 1
+#if FACTORYSETUP == 1 || FACTORY_DURING_PROD == 1
     int res = _factory_setup();
     if (res) {
         util_log("factory setup failed");
         return res;
     }
 #endif
+
+    _util = optiga_util_create(OPTIGA_INSTANCE_ID_0, _optiga_lib_callback, NULL);
+    if (NULL == _util) {
+        return OPTIGA_ERR_CREATE;
+    }
+
+    _crypt = optiga_crypt_create(OPTIGA_INSTANCE_ID_0, _optiga_lib_callback, NULL);
+    if (NULL == _crypt) {
+        return OPTIGA_ERR_CREATE;
+    }
 
     if (!_verify_config()) {
         util_log("verify config failed");
@@ -791,12 +809,7 @@ bool optiga_update_keys(void)
     _ifs->random_32_bytes(new_key);
 
     optiga_lib_status_t res = _optiga_util_write_data_sync(
-        _util,
-        OPTIGA_DATA_OBJECT_ID_HMAC,
-        OPTIGA_UTIL_ERASE_AND_WRITE,
-        0x00,
-        new_key,
-        sizeof(new_key));
+        _util, OID_HMAC, OPTIGA_UTIL_ERASE_AND_WRITE, 0x00, new_key, sizeof(new_key));
     if (res != OPTIGA_UTIL_SUCCESS) {
         return false;
     }
@@ -822,7 +835,7 @@ int optiga_kdf_external(const uint8_t* msg, size_t len, uint8_t* mac_out)
     uint32_t mac_out_len = 32;
 
     res = _optiga_crypt_hmac_sync(
-        _crypt, OPTIGA_HMAC_SHA_256, OPTIGA_DATA_OBJECT_ID_HMAC, msg, len, mac_out, &mac_out_len);
+        _crypt, OPTIGA_HMAC_SHA_256, OID_HMAC, msg, len, mac_out, &mac_out_len);
     if (res != OPTIGA_LIB_SUCCESS) {
         util_log("kdf fail err=%x", res);
         return res;
@@ -848,7 +861,7 @@ int optiga_kdf_internal(const uint8_t* msg, size_t len, uint8_t* kdf_out)
     res = _optiga_crypt_symmetric_encrypt_sync(
         _crypt,
         OPTIGA_SYMMETRIC_CMAC,
-        OPTIGA_DATA_OBJECT_ID_AES_SYMKEY,
+        OID_AES_SYMKEY,
         msg,
         len,
         NULL,
@@ -917,8 +930,7 @@ bool optiga_monotonic_increments_remaining(uint32_t* remaining_out)
 {
     uint8_t buf[4] = {0};
     uint16_t size = sizeof(buf);
-    optiga_lib_status_t res =
-        _optiga_util_read_data_sync(_util, OPTIGA_DATA_OBJECT_ID_COUNTER0, 0, buf, &size);
+    optiga_lib_status_t res = _optiga_util_read_data_sync(_util, OID_COUNTER0, 0, buf, &size);
     if (res != OPTIGA_LIB_SUCCESS) {
         return false;
     }
