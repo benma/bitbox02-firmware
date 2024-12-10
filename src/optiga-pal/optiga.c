@@ -135,12 +135,16 @@ static const uint8_t aes_symkey_metadata[] = {
     // Metadata tag in the data object
     0x20,
     // Number of bytes that follow
-    14,
+    18,
     // Set LcsO. Refer to macro to see the value or some more notes.
     0xC0,
     0x01,
     FINAL_LCSO_STATE,
-    // Allow writes
+    // Allow writes - GenSymkey requires this to be able to write.
+    // However, writes from the host are forbidden.
+    // Table 69 - 0xE200:
+    // "The GetDataObject, and SetDataObject commands are not allowed for the data part of the key
+    // object even if the metadata state the access rights differently"
     0xD0,
     0x01,
     0x00,
@@ -148,19 +152,27 @@ static const uint8_t aes_symkey_metadata[] = {
     0xD1,
     0x01,
     0xFF,
-    // Attach exeuction to counter at 0xE120
+    // Attach execution to counter at 0xE120 and enforce shielded connection.
+    // See Table 66 "Conf".
     0xD3,
-    0x03,
+    0x07,
     0x40,
     0xE1,
     0x20,
+    // &&
+    0xFD,
+    // Enforce shielded connection. According to 4.4.1.7 "EncryptSym" shielded protection is
+    // enforced anyway, but better to be explicit.
+    0x20,
+    0xE1,
+    0x40,
 };
 
 static const uint8_t attestation_metadata[] = {
     // Metadata tag in the data object
     0x20,
     // Number of bytes that follow
-    15,
+    17,
     // Set LcsO. Refer to macro to see the value or some more notes.
     0xC0,
     0x01,
@@ -169,7 +181,11 @@ static const uint8_t attestation_metadata[] = {
     0xE1,
     0x01,
     0x10,
-    // Allow writes
+    // Allow writes - GenKeyPair requires this to be able to write.
+    // However, writes from the host are forbidden.
+    // Table 69 - 0xE2F1:
+    // "The GetDataObject, and SetDataObject commands are not allowed for the data part of the key
+    // object even if the metadata state the access rights differently"
     0xD0,
     0x01,
     0x00,
@@ -177,17 +193,20 @@ static const uint8_t attestation_metadata[] = {
     0xD1,
     0x01,
     0xFF,
-    // Allow execution
+    // Execute: enforce shielded connection.
+    // See Table 66 "Conf".
     0xD3,
-    0x01,
-    0x00,
+    0x03,
+    0x20,
+    0xE1,
+    0x40,
 };
 
 static const uint8_t hmac_metadata[] = {
     // Metadata tag in the data object
     0x20,
     // Number of bytes that follow
-    15,
+    19,
     // Set LcsO. Refer to macro to see the value or some more notes.
     0xC0,
     0x01,
@@ -196,25 +215,30 @@ static const uint8_t hmac_metadata[] = {
     0xE8,
     0x01,
     0x21,
-    // Allow writes
+    // Allow writes, enforce shielded connection.
     0xD0,
-    0x01,
-    0x00,
+    0x03,
+    0x20,
+    0xE1,
+    0x40,
     // Disallow reads
     0xD1,
     0x01,
     0xFF,
-    // Allow exe
+    // Execute: enforce shielded connection.
+    // See Table 66 "Conf".
     0xD3,
-    0x01,
-    0x00,
+    0x03,
+    0x20,
+    0xE1,
+    0x40,
 };
 
 static const uint8_t arbitrary_data_metadata[] = {
     // Metadata tag in the data object
     0x20,
     // Number of bytes that follow
-    15,
+    19,
     // Set LcsO. Refer to macro to see the value or some more notes.
     0xC0,
     0x01,
@@ -223,14 +247,18 @@ static const uint8_t arbitrary_data_metadata[] = {
     0xE8,
     0x01,
     0x00,
-    // Allow writes
+    // Allow writes, enforce shielded connection.
     0xD0,
-    0x01,
-    0x00,
-    // Allow reads
+    0x03,
+    0x20,
+    0xE1,
+    0x40,
+    // Allow reads, enforce shielded connection.
     0xD1,
-    0x01,
-    0x00,
+    0x03,
+    0x20,
+    0xE1,
+    0x40,
     // Disallow exe
     0xD3,
     0x01,
@@ -488,7 +516,6 @@ static int _setup_shielded_communication(void)
 
     // We write the binding secret before updating the metadata, as the metadata update locks the
     // slot.
-    OPTIGA_UTIL_SET_COMMS_PROTECTION_LEVEL(_util, OPTIGA_COMMS_NO_PROTECTION);
     res = _optiga_util_write_data_sync(
         _util,
         OPTIGA_DATA_OBJECT_ID_PLATFORM_BINDING,
@@ -752,7 +779,6 @@ int optiga_setup(const securechip_interface_functions_t* ifs)
         util_log("verify config failed");
         return OPTIGA_ERR_CONFIG_MISMATCH;
     }
-
     return 0;
 }
 
@@ -883,7 +909,6 @@ bool optiga_attestation_sign(const uint8_t* challenge, uint8_t* signature_out)
     // Parse signature, see Solution Reference Manual 6.2.2,
     // example for ECC NIST-P256 signature.
     // The R/S components are
-    util_log("sign %d", sig_der_size);
     return rust_der_parse_optiga_signature(
         rust_util_bytes(sig_der, sig_der_size), rust_util_bytes_mut(signature_out, 64));
 }
