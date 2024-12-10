@@ -13,10 +13,11 @@
 // limitations under the License.
 
 #include "securechip.h"
-#include "atecc/atecc.h"
-#include "hardfault.h"
-#include "memory/memory_shared.h"
-#include "optiga-pal/optiga.h"
+
+#include <atecc/atecc.h>
+#include <hardfault.h>
+#include <memory/memory_shared.h>
+#include <optiga/optiga.h>
 
 typedef struct {
     int (*setup)(const securechip_interface_functions_t* fns);

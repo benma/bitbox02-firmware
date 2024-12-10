@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "optiga-pal/optiga.h"
+#include "optiga.h"
 #include "hal_delay.h"
 #include "hardfault.h"
 #include "optiga_crypt.h"
