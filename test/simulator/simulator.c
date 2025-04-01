@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
 
     // BitBox02 simulation initialization
     usb_processing_init();
-    usb_processing_set_send(usb_processing_hww(), send_usb_message_socket);
+    //usb_processing_set_send(usb_processing_hww(), send_usb_message_socket);
     printf("USB setup success\n");
 
     hww_setup();

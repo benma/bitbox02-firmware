@@ -13,15 +13,17 @@
 // limitations under the License.
 
 #include "common_main.h"
+#include "da14531/da14531_protocol.h"
 #include "driver_init.h"
 #include "firmware_main_loop.h"
 #include "hardfault.h"
 #include "memory/bitbox02_smarteeprom.h"
-#include "memory/spi_mem.h"
+#include "memory/memory_shared.h"
 #include "platform/platform_config.h"
 #include "platform_init.h"
 #include "qtouch.h"
 #include "screen.h"
+#include "uart.h"
 #include "ui/screen_stack.h"
 
 uint32_t __stack_chk_guard = 0;
@@ -32,12 +34,15 @@ int main(void)
     system_init();
     platform_init();
     __stack_chk_guard = common_stack_chk_guard();
+    if (memory_get_platform() == MEMORY_PLATFORM_BITBOX02_PLUS) {
+        da14531_protocol_init();
+    }
     screen_init();
+
     screen_splash();
     qtouch_init();
     common_main();
     bitbox02_smarteeprom_init();
-    spi_mem_test();
     firmware_main_loop();
     return 0;
 }
