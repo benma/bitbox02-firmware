@@ -1,4 +1,4 @@
-// Copyright 2019 Shift Cryptosecurity AG
+// Copyright 2025 Shift Crypto AG
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,26 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "platform_init.h"
-#include "memory/memory_shared.h"
-#include "uart.h"
-#include <driver_init.h>
-#include <ui/oled/oled.h>
-#if !defined(BOOTLOADER)
-#include "sd_mmc/sd_mmc_start.h"
-#endif
-#include "rust/rust.h"
+#include "da14531.h"
+#include "da14531_protocol.h"
+#include "util.h"
+#include "utils_ringbuffer.h"
 
-void platform_init(void)
+void da14531_power_down(struct ringbuffer* uart_out)
 {
-    oled_init();
-    if (memory_get_platform() == MEMORY_PLATFORM_BITBOX02_PLUS) {
-        uart_init();
+    util_log("da14531_power_down");
+    // TODO: 12 is defined in da14531_handler.c
+    uint8_t payload[2] = {12, 0};
+    uint8_t buf[10] = {0};
+    int len = da14531_protocol_format(
+        &buf[0], sizeof(buf), DA14531_PROTOCOL_PACKET_TYPE_CTRL_DATA, &payload[0], sizeof(payload));
+    for (int i = 0; i < len; i++) {
+        ringbuffer_put(uart_out, buf[i]);
     }
-#if !defined(BOOTLOADER)
-    // these two functions are noops if "rtt" feature isn't enabled in rust
-    rust_rtt_init();
-    util_log("platform_init");
-    sd_mmc_start();
-#endif
 }
