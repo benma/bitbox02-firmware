@@ -26,6 +26,9 @@
 #include "mock_dap.h"
 #endif
 
+#include <hardfault.h>
+#include <memory/memory_spi.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -38,9 +41,6 @@ enum firmware_loader_state {
 
 struct firmware_loader {
     enum firmware_loader_state state;
-    const uint8_t* firmware_start;
-    uint16_t firmware_size;
-    uint8_t firmware_chksum;
 };
 
 enum serial_link_in_state {
@@ -98,19 +98,13 @@ static const char* _firmware_loader_state_str(enum firmware_loader_state state)
 }
 #endif
 
-static void _firmware_loader_init(
-    struct firmware_loader* self,
-    const uint8_t* firmware_start,
-    uint16_t firmware_size)
+static void _firmware_loader_init(struct firmware_loader* self)
 {
 #if defined(BOOTLOADER)
     self->state = FIRMWARE_LOADER_STATE_IDLE;
 #else
     self->state = FIRMWARE_LOADER_STATE_DONE;
 #endif
-    self->firmware_start = firmware_start;
-    self->firmware_size = firmware_size;
-    self->firmware_chksum = _checksum(firmware_start, firmware_size);
 }
 
 #define SOH 0x01
@@ -124,6 +118,10 @@ static void _firmware_loader_poll(
     uint16_t* buf_in_len,
     struct ringbuffer* out_queue)
 {
+    static uint8_t* ble_fw = NULL;
+    static size_t ble_fw_size = 0;
+    static uint8_t ble_fw_checksum = 0;
+
     // if (*buf_in_len > 0) {
     //     util_log(
     //         "%s, got bytes %s",
@@ -133,13 +131,21 @@ static void _firmware_loader_poll(
 
     switch (self->state) {
     case FIRMWARE_LOADER_STATE_IDLE:
+        if (ble_fw == NULL) {
+            if (!memory_spi_get_active_ble_firmware(&ble_fw, &ble_fw_size, &ble_fw_checksum)) {
+                Abort("TODO");
+            }
+            *buf_in_len = 0;
+            break;
+        }
+
         for (uint16_t i = 0; i < *buf_in_len; i++) {
             if (buf_in[i] == STX) {
                 util_log("da14531: requested firmware");
                 ASSERT(ringbuffer_num(out_queue) + 3 <= out_queue->size);
                 ringbuffer_put(out_queue, SOH);
-                ringbuffer_put(out_queue, self->firmware_size & 0xff);
-                ringbuffer_put(out_queue, (self->firmware_size >> 8) & 0xff);
+                ringbuffer_put(out_queue, ble_fw_size & 0xff);
+                ringbuffer_put(out_queue, (ble_fw_size >> 8) & 0xff);
                 self->state = FIRMWARE_LOADER_STATE_SENT_HEADER;
                 break;
             }
@@ -152,7 +158,12 @@ static void _firmware_loader_poll(
                 util_log("da14513: sending firmware");
                 // Wait until uart tx is ready, and issue a write for the firmware.
                 // Don't use ringbuffer as the source is static
-                while (!(uart_0_write(self->firmware_start, self->firmware_size)));
+                if (ble_fw != NULL) {
+                    // This should never happen
+                    // TODO
+                }
+
+                while (!(uart_0_write(ble_fw, ble_fw_size)));
                 self->state = FIRMWARE_LOADER_STATE_SENT_FIRMWARE;
             } else {
                 self->state = FIRMWARE_LOADER_STATE_IDLE;
@@ -162,19 +173,22 @@ static void _firmware_loader_poll(
         break;
     case FIRMWARE_LOADER_STATE_SENT_FIRMWARE:
         if (*buf_in_len == 1) {
-            if (buf_in[0] == self->firmware_chksum) {
+            if (ble_fw == NULL || ble_fw_size == 0) {
+                Abort("ble_fw is NULL");
+            }
+            if (buf_in[0] == ble_fw_checksum) {
                 util_log("da14531: checksum success (%x)", buf_in[0]);
                 ASSERT(ringbuffer_num(out_queue) + 1 <= out_queue->size);
                 ringbuffer_put(out_queue, ACK);
                 self->state = FIRMWARE_LOADER_STATE_DONE;
             } else {
                 util_log(
-                    "da14531: checksum failure, their:%02X, our:%02X",
-                    buf_in[0],
-                    self->firmware_chksum);
+                    "da14531: checksum failure, their:%02X, our:%02X", buf_in[0], ble_fw_checksum);
                 self->state = FIRMWARE_LOADER_STATE_IDLE;
             }
-            ASSERT(buf_in[0] == self->firmware_chksum);
+            ASSERT(buf_in[0] == ble_fw_checksum);
+            free(ble_fw);
+            ble_fw = NULL;
             *buf_in_len = 0;
         }
         break;
@@ -418,7 +432,7 @@ static bool _swd_reset_da14531(void)
 
 void da14531_protocol_init(void)
 {
-    _firmware_loader_init(&_protocol.loader, da14531_firmware_start, da14531_firmware_size);
+    _firmware_loader_init(&_protocol.loader);
     _serial_link_in_init(&_protocol.serial_link);
 
     // Only attempt swd reset in factory setup or debug builds. In production swd is turned off and

@@ -27,6 +27,7 @@ mod cardano;
 
 mod backup;
 mod bip85;
+mod bluetooth;
 mod device_info;
 mod electrum;
 mod reset;
@@ -121,7 +122,8 @@ fn can_call(request: &Request) -> bool {
         | Request::DeviceLanguage(_)
         | Request::CheckSdcard(_)
         | Request::InsertRemoveSdcard(_)
-        | Request::ListBackups(_) => matches!(
+        | Request::ListBackups(_)
+        | Request::Bluetooth(_) => matches!(
             state,
             State::Uninitialized | State::Seeded | State::InitializedAndUnlocked
         ),
@@ -196,6 +198,11 @@ async fn process_api(request: &Request) -> Result<Response, Error> {
         #[cfg(not(feature = "app-cardano"))]
         Request::Cardano(_) => Err(Error::Disabled),
         Request::Bip85(ref request) => bip85::process(request).await,
+        Request::Bluetooth(pb::BluetoothRequest {
+            request: Some(ref request),
+        }) => bluetooth::process_api(request)
+            .await
+            .map(|r| Response::Bluetooth(pb::BluetoothResponse { response: Some(r) })),
         _ => Err(Error::InvalidInput),
     }
 }
