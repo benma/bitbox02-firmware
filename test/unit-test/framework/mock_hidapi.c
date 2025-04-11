@@ -39,11 +39,11 @@ static void _delay(uint32_t msec)
     nanosleep(&ts, &rem);
 }
 
-// function for sending packets?
-static void _send_packet_cb(void)
-{
-    // printf("send\n");
-}
+/* // function for sending packets? */
+/* static void _send_packet_cb(void) */
+/* { */
+/*     // printf("send\n"); */
+/* } */
 
 void* timer_task(void* args)
 {
@@ -89,7 +89,7 @@ hid_device* hid_open_path(const char* path)
     static char sham[] = "sham";
     usb_processing_init();
     u2f_device_setup();
-    usb_processing_set_send(usb_processing_u2f(), _send_packet_cb);
+    //usb_processing_set_send(usb_processing_u2f(), _send_packet_cb);
     timer_thread_stop = false;
     int res = pthread_create(&thread, NULL, &timer_task, NULL);
     if (res != 0) {
