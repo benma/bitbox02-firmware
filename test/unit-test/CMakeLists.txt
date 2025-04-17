@@ -30,6 +30,7 @@ set(IGNORE_SOURCES
     "src/memory/nvmctrl.c"
     "src/memory/smarteeprom.c"
     "src/memory/mpu.c"
+    "src/memory/spi_mem.c"
     "src/uart.c"
     )
 
@@ -64,6 +65,7 @@ add_library(bitbox_objects
   framework/mock_screen.c
   framework/mock_screen_stack.c
   framework/mock_memory.c
+  framework/mock_spi_mem.c
   framework/mock_qtouch.c
   framework/mock_gestures.c
   framework/mock_component.c
