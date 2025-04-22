@@ -136,7 +136,7 @@ typedef enum {
 } error_code_t;
 
 typedef enum {
-    BLE_ERR_OK,
+    BLE_OK,
     BLE_ERR_FW_TOO_LARGE,
     BLE_ERR_FLASH_FW,
     BLE_ERR_GET_METADATA,
@@ -379,7 +379,7 @@ static ble_error_code_t _verify_ble(const uint8_t* expected_ble_fw_hash, uint8_t
         return BLE_ERR_FW_MISMATCH;
     }
 
-    return BLE_ERR_OK;
+    return BLE_OK;
 }
 
 // TODO: call this as part of an API endpoint?
@@ -401,9 +401,9 @@ static ble_error_code_t _setup_ble(void)
 
     // BLE already setup, no need to repeat it. This saves a lot of time when repeating the
     // factorysetup of a device, as then we can skip the time-consuming chip erase below.
-    if (_verify_ble(ble_fw_hash, checksum) == BLE_ERR_OK) {
+    if (_verify_ble(ble_fw_hash, checksum) == BLE_OK) {
         screen_print_debug("Skipping BLE setup.\nAlready done.", 0);
-        return BLE_ERR_OK;
+        return BLE_OK;
     }
 
     // Erase chip.
