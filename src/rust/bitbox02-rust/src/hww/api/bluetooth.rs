@@ -33,7 +33,7 @@ const ALLOWED_HASH: &[u8; 32] = b"\xb1\xe6\x92\x94\x04\xea\xd1\xca\x02\x29\x25\x
 // read-erase-write the same sector.
 const SPI_ERASE_SIZE: u32 = 4096;
 
-/// Like `hww::next_request`, but for Ethereum requests/responses.
+/// Like `hww::next_request`, but for Bluetooth requests/responses.
 async fn next_request(response: Response) -> Result<Request, Error> {
     let request =
         crate::hww::next_request(pb::response::Response::Bluetooth(pb::BluetoothResponse {
