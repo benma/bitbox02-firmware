@@ -396,7 +396,7 @@ static ble_error_code_t _setup_ble(void)
     if (wally_sha256(
             da14531_firmware_start(), da14531_firmware_size(), ble_fw_hash, sizeof(ble_fw_hash)) !=
         WALLY_OK) {
-        Abort("_seutp_ble: wally_sha256 failed");
+        Abort("_setup_ble: wally_sha256 failed");
     }
 
     // BLE already setup, no need to repeat it. This saves a lot of time when repeating the
