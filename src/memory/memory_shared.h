@@ -108,7 +108,6 @@ typedef union {
         uint8_t reserve3[1]; // align to 4 bytes
         // Size of each of the two stored BLE firmwares.
         uint16_t ble_firmware_sizes[2];
-        uint8_t reserve4[2]; // align to 4 bytes
     } fields;
     uint8_t bytes[FLASH_SHARED_DATA_LEN];
 } chunk_shared_t;
