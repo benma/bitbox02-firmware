@@ -100,14 +100,14 @@ typedef union {
         // - 0x01: active BLE firmware is at `MEMORY_SPI_BLE_FIRMWARE_2_ADDR` in the SPI memory
         // chip.
         uint8_t ble_active_index;
-        uint8_t reserve3[3]; // align to 4 bytes
-        // Size of each of the two stored BLE firmwares.
-        uint16_t ble_firmware_sizes[2];
         // Checksum of each of the two BLE stored firmwares.
         //
         // The checksum is the xor of all bytes. It is returned by the BLE chip after loading the
         // firmware, so we can verify that the firmware was loaded successfully.
         uint8_t ble_firmware_checksums[2];
+        uint8_t reserve3[1]; // align to 4 bytes
+        // Size of each of the two stored BLE firmwares.
+        uint16_t ble_firmware_sizes[2];
         uint8_t reserve4[2]; // align to 4 bytes
     } fields;
     uint8_t bytes[FLASH_SHARED_DATA_LEN];
