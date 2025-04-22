@@ -46,7 +46,6 @@ bool memory_spi_get_active_ble_firmware(
                                                        : MEMORY_SPI_BLE_FIRMWARE_2_ADDR;
         *firmware_out = spi_mem_read(ble_addr, size);
         if (!*firmware_out) {
-            free(*firmware_out);
             *firmware_out = NULL;
             return false;
         }
