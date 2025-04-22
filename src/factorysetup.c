@@ -331,9 +331,8 @@ static void _api_msg(const uint8_t* input, size_t in_len, uint8_t* output, size_
 
 static void _free(uint8_t** buf)
 {
-    if (*buf != NULL) {
-        free(*buf);
-    }
+    free(*buf);
+    *buf = NULL;
 }
 
 static uint8_t _ble_firmware_checksum(const uint8_t* buf, size_t buf_len)
