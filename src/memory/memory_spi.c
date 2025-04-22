@@ -37,16 +37,10 @@ bool memory_spi_get_active_ble_firmware(
         return false;
     }
     if (firmware_out != NULL) {
-        *firmware_out = (uint8_t*)malloc(size);
-        if (!firmware_out) {
-            // Abort("failed to malloc");
-            return false;
-        }
         uint32_t ble_addr = metadata.active_index == 0 ? MEMORY_SPI_BLE_FIRMWARE_1_ADDR
                                                        : MEMORY_SPI_BLE_FIRMWARE_2_ADDR;
         *firmware_out = spi_mem_read(ble_addr, size);
         if (!*firmware_out) {
-            *firmware_out = NULL;
             return false;
         }
         uint8_t fw_hash[32] = {0};
