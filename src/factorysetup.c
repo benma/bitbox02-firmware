@@ -42,6 +42,11 @@
 
 #define FACTORYSETUP_CMD (HID_VENDOR_FIRST + 0x02) // factory setup commands
 
+// We commit to the BLE firmware hash here to avoid accidentally installing an unexpected firmware.
+static const uint8_t _allowed_ble_fw_hash[32] =
+    "\xb1\xe6\x92\x94\x04\xea\xd1\xca\x02\x29\x25\x48\x97\x5d\xc8\x57\x10\x82\x5b\x91\xf8\x03\x84"
+    "\x59\xc8\x79\xaf\x37\x00\xf8\x1f\x05";
+
 // 65 bytes uncompressed secp256k1 root attestation pubkey.
 #define ROOT_PUBKEY_SIZE 65
 static uint8_t _root_pubkey_bytes[11][ROOT_PUBKEY_SIZE] = {
@@ -146,6 +151,7 @@ typedef enum {
     BLE_ERR_FW_CHECKSUM_MISMATCH,
     BLE_ERR_FW_MISMATCH,
     BLE_ERR_SPI_ERASE,
+    BLE_ERR_FW_NOT_ALLOWED,
 } ble_error_code_t;
 
 static ble_error_code_t _ble_result;
@@ -396,6 +402,10 @@ static ble_error_code_t _setup_ble(void)
             da14531_firmware_start(), da14531_firmware_size(), ble_fw_hash, sizeof(ble_fw_hash)) !=
         WALLY_OK) {
         Abort("_setup_ble: wally_sha256 failed");
+    }
+
+    if (!MEMEQ(ble_fw_hash, _allowed_ble_fw_hash, 32)) {
+        return BLE_ERR_FW_NOT_ALLOWED;
     }
 
     // BLE already setup, no need to repeat it. This saves a lot of time when repeating the
