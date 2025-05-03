@@ -48,8 +48,9 @@ static void _show_reset_label(bool status)
 }
 #endif
 
-static void _ble_reset(void)
+void reset_ble(void)
 {
+#ifndef TESTING
     struct ringbuffer uart_queue;
     uint8_t uart_queue_buf[64];
     ringbuffer_init(&uart_queue, &uart_queue_buf[0], sizeof(uart_queue_buf));
@@ -57,6 +58,7 @@ static void _ble_reset(void)
     while (ringbuffer_num(&uart_queue)) {
         uart_poll(NULL, 0, NULL, &uart_queue);
     }
+#endif
 }
 
 void reset_reset(bool status)
@@ -96,7 +98,7 @@ void reset_reset(bool status)
 
     // The ble chip needs to be restarted to load the new secrets.
     if (memory_get_platform() == MEMORY_PLATFORM_BITBOX02_PLUS) {
-        _ble_reset();
+        reset_ble();
     }
 
     reboot();
