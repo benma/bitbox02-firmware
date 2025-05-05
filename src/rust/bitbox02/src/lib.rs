@@ -255,6 +255,16 @@ pub fn sha512(msg: &[u8]) -> [u8; 64] {
     result
 }
 
+#[cfg(not(feature = "testing"))]
+pub fn communicating_via_ble() -> bool {
+    unsafe { bitbox02_sys::firmware_main_loop_communicating_via_ble() }
+}
+
+#[cfg(feature = "testing")]
+pub fn communicating_via_ble() -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

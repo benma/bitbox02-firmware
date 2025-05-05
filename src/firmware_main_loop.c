@@ -46,12 +46,17 @@
 
 static bool _usb_hww_request_seen = false;
 
+static bool _has_ble(void)
+{
+    return memory_get_platform() == MEMORY_PLATFORM_BITBOX02_PLUS;
+}
+
 void firmware_main_loop(void)
 {
     // This starts the async orientation screen workflow, which is processed by the loop below.
     orientation_screen();
 
-    bool has_ble = memory_get_platform() == MEMORY_PLATFORM_BITBOX02_PLUS;
+    bool has_ble = _has_ble();
 
     // TODO: Send out new BLE product string, so app sees that we are booted
     // Set it to the size of the ringbuffer in the UART driver so we can read out all bytes
@@ -167,4 +172,9 @@ void firmware_main_loop(void)
         rust_workflow_spin();
         rust_async_usb_spin();
     }
+}
+
+bool firmware_main_loop_communicating_via_ble(void)
+{
+    return _has_ble() && !_usb_hww_request_seen;
 }

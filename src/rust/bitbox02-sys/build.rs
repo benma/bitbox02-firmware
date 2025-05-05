@@ -149,6 +149,7 @@ const ALLOWLIST_FNS: &[&str] = &[
     "wally_free_string",
     "wally_get_secp_context",
     "wally_sha512",
+    "firmware_main_loop_communicating_via_ble",
 ];
 
 const RUSTIFIED_ENUMS: &[&str] = &[

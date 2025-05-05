@@ -15,9 +15,17 @@
 #ifndef _FIRMWARE_MAIN_LOOP_H_
 #define _FIRMWARE_MAIN_LOOP_H_
 
+#include <stdbool.h>
+
 /**
  * Runs the main UI of the bitbox.
  */
 void firmware_main_loop(void);
+
+/**
+ * Returns true if this device is bluetooth enabled and we have not seen a USB request yet, which
+ * means we are communicating via Bluetooth.
+ */
+bool firmware_main_loop_communicating_via_ble(void);
 
 #endif
