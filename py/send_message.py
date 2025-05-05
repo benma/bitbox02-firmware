@@ -1448,7 +1448,9 @@ class SendMessage:
 
     def _bluetooth_upgrade(self) -> None:
         from pathlib import Path
-        fw = Path("bitbox_da14531_firmware.bin").read_bytes()
+
+        filename = input("Filename: ")
+        fw = Path(filename).read_bytes()
         try:
             self._device.bluetooth_upgrade(fw)
         except UserAbortException:
