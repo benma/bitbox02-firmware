@@ -343,6 +343,27 @@ pub fn secp256k1_schnorr_sign(
     }
 }
 
+pub fn bip39_mnemonic_to_bip39_seed(
+    mnemonic: &str,
+    passphrase: &str,
+) -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
+    let mnemonic = zeroize::Zeroizing::new(crate::util::str_to_cstr_vec(mnemonic)?);
+    let passphrase = zeroize::Zeroizing::new(crate::util::str_to_cstr_vec(passphrase)?);
+    let mut bip39_seed = zeroize::Zeroizing::new(vec![0u8; 64]);
+    match unsafe {
+        bitbox02_sys::bip39_mnemonic_to_seed(
+            mnemonic.as_ptr(),
+            passphrase.as_ptr(),
+            bip39_seed.as_mut_ptr(),
+            bip39_seed.len(),
+            core::ptr::null_mut(),
+        )
+    } {
+        0 => Ok(bip39_seed),
+        _ => Err(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -478,5 +499,46 @@ mod tests {
 
         // Invalid seed side
         assert!(bip39_mnemonic_from_seed(b"foo").is_err());
+    }
+
+    #[test]
+    fn test_bip39_mnemonic_to_bip39_seed() {
+        assert(bip39_mnemonic_to_bip39_seed("invalid", "").is_err());
+
+        // 12 words, empty passphrase
+        assert_eq!(
+            bip39_mnemonic_to_bip39_seed(
+                "gaze panther emotion purchase spoon blue thumb pact gesture chunk armor fancy",
+                "",
+            ).unwrap().as_slice(),
+            hex::decode("2a5c5a5b583950253c3138717f67bbedd9cb3eb11195580b27a8867cd74794fde5205be1b9b2176efe132691691cdc290f2af52d1b00252f7894fde786cdf7ea").unwrap().as_slice(),
+        );
+
+        // 12 words, non-empty passphrase
+        assert_eq!(
+            bip39_mnemonic_to_bip39_seed(
+                "gaze panther emotion purchase spoon blue thumb pact gesture chunk armor fancy",
+                "foo",
+            ).unwrap().as_slice(),
+            hex::decode("d8ea06a649ded1f641f879d9d24155646ab54c55ff9dd7e8a73aff1eac2bf469ea28f1b85d59252e0d6dd070d6672e1a359156dba513d3a94524d97673e257d7").unwrap().as_slice(),
+        );
+
+        // 24 words, empty passphrase
+        assert_eq!(
+            bip39_mnemonic_to_bip39_seed(
+                "century twenty educate injury height garden chair alcohol sure indoor benefit forward outdoor dune arch weekend canvas credit only arch sustain network parent lunar",
+                "",
+            ).unwrap().as_slice(),
+            hex::decode("dfcfabedbf2a0e66c34680a3c5b8ded383dcf3ae41f090cbf1d9844adbe6f61bef9a37627668ea62a5a7ff78e5c27861b77f3c3e4d8f1c75243d7169eec8fff0").unwrap().as_slice(),
+        );
+
+        // 24 words, non-empty passphrase
+        assert_eq!(
+            bip39_mnemonic_to_bip39_seed(
+                "century twenty educate injury height garden chair alcohol sure indoor benefit forward outdoor dune arch weekend canvas credit only arch sustain network parent lunar",
+                "foo",
+            ).unwrap().as_slice(),
+            hex::decode("ba8ced45184b953ca81c8e9dcab2ece7ba507d255cacc66168e33a46bec2f99e98c654f0fc431264a71da40789d6fa0fe3df9b93fbc9dcb55940a3863f805aac").unwrap().as_slice(),
+        );
     }
 }

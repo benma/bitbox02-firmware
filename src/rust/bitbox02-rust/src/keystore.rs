@@ -104,6 +104,20 @@ pub fn bip85_ln(index: u32) -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
     Ok(entropy)
 }
 
+pub fn inheritance_descriptor() -> Result<(), ()> {
+    const BIP85_APP_INHERITANCE: u32 = 139;
+    let bip85_seed_entropy = bip85_entropy(&[
+        83696968 + HARDENED,
+        BIP85_APP_INHERITANCE + HARDENED,
+        0 + HARDENED,
+        12 + HARDENED,
+        HARDENED,
+    ])?;
+    let beneficiary_mnemonic = keystore::bip39_mnemonic_from_seed(&bip85_seed_entropy[..16])?;
+    let beneficiary_bip39_seed = keystore::bip39_mnemonic_to_bip39_seed(&beneficiary_mnemonic, "")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
