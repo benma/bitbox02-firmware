@@ -116,6 +116,24 @@ pub extern "C" fn rust_cipher_decrypt(
     }
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn rust_secp256k1_get_private_key(
+    keypath: *const u32,
+    keypath_len: usize,
+    mut out: crate::util::BytesMut,
+) -> bool {
+    match bitbox02_rust::keystore::secp256k1_get_private_key(core::slice::from_raw_parts(
+        keypath,
+        keypath_len,
+    )) {
+        Ok(private_key) => {
+            out.as_mut().copy_from_slice(&private_key);
+            true
+        }
+        Err(()) => false,
+    }
+}
+
 /// # Safety
 ///
 /// The pointer `data` must point to a buffer of length `len`.

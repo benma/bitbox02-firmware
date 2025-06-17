@@ -31,10 +31,50 @@ pub fn get_bip39_mnemonic() -> Result<zeroize::Zeroizing<String>, ()> {
     keystore::bip39_mnemonic_from_seed(&keystore::copy_seed()?)
 }
 
+fn get_xprv(keypath: &[u32]) -> Result<bitcoin::bip32::Xpriv, ()> {
+    let bip39_seed = keystore::copy_bip39_seed()?;
+    let xpriv = bitcoin::bip32::Xpriv::new_master(bitcoin::NetworkKind::Main, &bip39_seed)
+        .map_err(|_| ())?;
+    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let keypath = keypath
+        .into_iter()
+        .map(|&n| bitcoin::bip32::ChildNumber::from(n))
+        .collect::<Vec<bitcoin::bip32::ChildNumber>>();
+    xpriv.derive_priv(&secp, &keypath).map_err(|_| ())
+}
+
+fn get_xprv_twice(keypath: &[u32]) -> Result<bitcoin::bip32::Xpriv, ()> {
+    let xprv = get_xprv(keypath)?;
+    if xprv == get_xprv(keypath)? {
+        Ok(xprv)
+    } else {
+        Err(())
+    }
+}
+
+pub fn secp256k1_get_private_key(keypath: &[u32]) -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
+    let xprv = get_xprv(keypath)?;
+    Ok(zeroize::Zeroizing::new(
+        xprv.private_key.secret_bytes().to_vec(),
+    ))
+}
+
+pub fn secp256k1_get_private_key_twice(keypath: &[u32]) -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
+    let privkey = secp256k1_get_private_key(keypath)?;
+    if privkey == secp256k1_get_private_key(keypath)? {
+        Ok(privkey)
+    } else {
+        Err(())
+    }
+}
+
 /// Derives an xpub from the keystore seed at the given keypath.
 pub fn get_xpub(keypath: &[u32]) -> Result<bip32::Xpub, ()> {
-    // Convert from C keystore to Rust by encoding the xpub in C and decoding it in Rust.
-    bip32::Xpub::from_bytes(&keystore::encode_xpub_at_keypath(keypath)?)
+    let xpriv = get_xprv_twice(keypath)?;
+    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let xpub = bitcoin::bip32::Xpub::from_priv(&secp, &xpriv);
+
+    Ok(bip32::Xpub::from(xpub))
 }
 
 /// Returns fingerprint of the root public key at m/, which are the first four bytes of its hash160
@@ -45,7 +85,7 @@ pub fn root_fingerprint() -> Result<Vec<u8>, ()> {
 }
 
 fn bip85_entropy(keypath: &[u32]) -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
-    let priv_key = keystore::secp256k1_get_private_key(keypath)?;
+    let priv_key = secp256k1_get_private_key_twice(keypath)?;
     let mut mac = SimpleHmac::<Sha512>::new_from_slice(b"bip-entropy-from-k").unwrap();
     mac.update(&priv_key);
     let mut out = zeroize::Zeroizing::new(vec![0u8; 64]);
@@ -111,6 +151,40 @@ mod tests {
     use bitbox02::testing::{
         mock_memory, mock_unlocked, mock_unlocked_using_mnemonic, TEST_MNEMONIC,
     };
+
+    #[test]
+    fn test_secp256k1_get_private_key() {
+        keystore::lock();
+        let keypath = &[84 + HARDENED, 0 + HARDENED, 0 + HARDENED, 0, 0];
+        assert!(secp256k1_get_private_key(keypath).is_err());
+
+        mock_unlocked_using_mnemonic(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "",
+        );
+
+        assert_eq!(
+            hex::encode(secp256k1_get_private_key(keypath).unwrap()),
+            "4604b4b710fe91f584fff084e1a9159fe4f8408fff380596a604948474ce4fa3"
+        );
+    }
+
+    #[test]
+    fn test_secp256k1_get_private_key_twice() {
+        keystore::lock();
+        let keypath = &[84 + HARDENED, 0 + HARDENED, 0 + HARDENED, 0, 0];
+        assert!(secp256k1_get_private_key_twice(keypath).is_err());
+
+        mock_unlocked_using_mnemonic(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "",
+        );
+
+        assert_eq!(
+            hex::encode(secp256k1_get_private_key_twice(keypath).unwrap()),
+            "4604b4b710fe91f584fff084e1a9159fe4f8408fff380596a604948474ce4fa3"
+        );
+    }
 
     #[test]
     fn test_get_bip39_mnemonic() {
