@@ -31,19 +31,25 @@ pub fn get_bip39_mnemonic() -> Result<zeroize::Zeroizing<String>, ()> {
     keystore::bip39_mnemonic_from_seed(&keystore::copy_seed()?)
 }
 
-fn get_xprv(keypath: &[u32]) -> Result<bitcoin::bip32::Xpriv, ()> {
+fn get_xprv(keypath: &[u32]) -> Result<bip32::Xprv, ()> {
     let bip39_seed = keystore::copy_bip39_seed()?;
-    let xpriv = bitcoin::bip32::Xpriv::new_master(bitcoin::NetworkKind::Main, &bip39_seed)
-        .map_err(|_| ())?;
+    let xprv: bip32::Xprv =
+        bitcoin::bip32::Xpriv::new_master(bitcoin::NetworkKind::Main, &bip39_seed)
+            .map_err(|_| ())?
+            .into();
     let secp = bitcoin::secp256k1::Secp256k1::new();
     let keypath = keypath
         .into_iter()
         .map(|&n| bitcoin::bip32::ChildNumber::from(n))
         .collect::<Vec<bitcoin::bip32::ChildNumber>>();
-    xpriv.derive_priv(&secp, &keypath).map_err(|_| ())
+    Ok(xprv
+        .xprv
+        .derive_priv(&secp, &keypath)
+        .map_err(|_| ())?
+        .into())
 }
 
-fn get_xprv_twice(keypath: &[u32]) -> Result<bitcoin::bip32::Xpriv, ()> {
+fn get_xprv_twice(keypath: &[u32]) -> Result<bip32::Xprv, ()> {
     let xprv = get_xprv(keypath)?;
     if xprv == get_xprv(keypath)? {
         Ok(xprv)
@@ -55,7 +61,7 @@ fn get_xprv_twice(keypath: &[u32]) -> Result<bitcoin::bip32::Xpriv, ()> {
 pub fn secp256k1_get_private_key(keypath: &[u32]) -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
     let xprv = get_xprv(keypath)?;
     Ok(zeroize::Zeroizing::new(
-        xprv.private_key.secret_bytes().to_vec(),
+        xprv.xprv.private_key.secret_bytes().to_vec(),
     ))
 }
 
@@ -72,7 +78,7 @@ pub fn secp256k1_get_private_key_twice(keypath: &[u32]) -> Result<zeroize::Zeroi
 pub fn get_xpub(keypath: &[u32]) -> Result<bip32::Xpub, ()> {
     let xpriv = get_xprv_twice(keypath)?;
     let secp = bitcoin::secp256k1::Secp256k1::new();
-    let xpub = bitcoin::bip32::Xpub::from_priv(&secp, &xpriv);
+    let xpub = bitcoin::bip32::Xpub::from_priv(&secp, &xpriv.xprv);
 
     Ok(bip32::Xpub::from(xpub))
 }
