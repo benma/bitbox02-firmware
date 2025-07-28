@@ -609,6 +609,9 @@ class BitBoxCommonAPI:
             self._bitbox_protocol = BitBoxProtocolV1(transport)
 
         if self.version >= semver.VersionInfo(2, 0, 0):
+            for i in range(200):
+                print(f'Attestation check #{i}')
+                self._perform_attestation()
             noise_config.attestation_check(self._perform_attestation())
             self._bitbox_protocol.unlock_query()
 
