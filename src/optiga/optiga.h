@@ -42,4 +42,6 @@ USE_RESULT bool optiga_u2f_counter_inc(uint32_t* counter);
 #endif
 USE_RESULT bool optiga_model(securechip_model_t* model_out);
 
+USE_RESULT uint8_t optiga_security_event_counter(void);
+
 #endif // _OPTIGA_H_

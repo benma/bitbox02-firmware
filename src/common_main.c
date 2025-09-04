@@ -23,6 +23,7 @@
 #include "random.h"
 #include "screen.h"
 #include "securechip/securechip.h"
+#include "optiga/optiga.h"
 #include "util.h"
 
 extern void __attribute__((noreturn)) __stack_chk_fail(void);
@@ -51,6 +52,68 @@ static const securechip_interface_functions_t _securechip_interface_functions = 
     .random_32_bytes = random_32_bytes,
 };
 
+static void _check_event_counters(void)
+{
+    uint8_t counter = optiga_security_event_counter();
+    uint8_t nc;
+    util_log("EV CTR: %d", counter);
+    uint8_t msg[32] = {0};
+    uint8_t out[64] = {0};
+
+    // Sometimes a printed counter is one less than it should be because optiga decrements the event
+    // counter once every 5s.
+
+    optiga_reset_keys();
+    nc = optiga_security_event_counter();
+    util_log("optiga_reset_keys %d", nc-counter);
+    counter = nc;
+
+    optiga_gen_attestation_key(out);
+    nc = optiga_security_event_counter();
+    util_log("optiga_gen_attestation_key %d", nc-counter);
+    counter = nc;
+
+
+    optiga_init_new_password("");
+    nc = optiga_security_event_counter();
+    util_log("optiga_init_new_password %d", nc-counter);
+    counter = nc;
+
+    optiga_kdf_external(msg, sizeof(msg), out);
+    nc = optiga_security_event_counter();
+    util_log("optiga_kdf_external %d", nc-counter);
+    counter = nc;
+
+    optiga_stretch_password("", out);
+    nc = optiga_security_event_counter();
+    util_log("optiga_stretch_password %d", nc-counter);
+    counter = nc;
+
+    optiga_attestation_sign(msg, out);
+    nc = optiga_security_event_counter();
+    util_log("optiga_attestation_sign %d", nc-counter);
+    counter = nc;
+
+    optiga_random(out);
+    nc = optiga_security_event_counter();
+    util_log("optiga_random %d", nc-counter);
+    counter = nc;
+
+    optiga_u2f_counter_set(1);
+    nc = optiga_security_event_counter();
+    util_log("optiga_u2f_counter_set %d", nc-counter);
+    counter = nc;
+
+    uint32_t u2fc = 0;
+
+    optiga_u2f_counter_inc(&u2fc);
+    nc = optiga_security_event_counter();
+    util_log("optiga_u2f_counter_inc %d", nc-counter);
+    counter = nc;
+
+    util_log("EV CTR: %d", counter);
+}
+
 void common_main(void)
 {
     mpu_bitbox02_init();
@@ -77,4 +140,6 @@ void common_main(void)
             securechip_result);
         AbortAutoenter(errmsg);
     }
+
+    _check_event_counters();
 }

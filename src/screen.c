@@ -117,6 +117,6 @@ void screen_init(
 
 void screen_clear(void)
 {
-    ASSERT(_clear_fn);
-    _clear_fn();
+    /* ASSERT(_clear_fn); */
+    /* _clear_fn(); */
 }

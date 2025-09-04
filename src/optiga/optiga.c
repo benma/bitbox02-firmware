@@ -1823,3 +1823,14 @@ bool optiga_model(securechip_model_t* model_out)
     *model_out = OPTIGA_TRUST_M_V3;
     return true;
 }
+
+uint8_t optiga_security_event_counter(void)
+{
+    uint8_t counter = 0;
+    uint16_t size = sizeof(counter);
+    optiga_lib_status_t res = _optiga_util_read_data_sync(_util, 0xE0C5, 0, &counter, &size);
+    if (res != OPTIGA_LIB_SUCCESS) {
+        return 255;
+    }
+    return counter;
+}
