@@ -29,8 +29,6 @@
 #include <rust/rust.h>
 #include <secp256k1_ecdsa_s2c.h>
 
-// Change this ONLY via keystore_unlock() or keystore_lock()
-static bool _is_unlocked_device = false;
 // Stores a random key after unlock which, after stretching, is used to encrypt the retained seed.
 static uint8_t _unstretched_retained_seed_encryption_key[32] = {0};
 // Must be defined if is_unlocked is true. ONLY ACCESS THIS WITH keystore_copy_seed().
@@ -41,8 +39,6 @@ static size_t _retained_seed_encrypted_len = 0;
 // plaintext.
 static uint8_t _retained_seed_hash[32] = {0};
 
-// Change this ONLY via keystore_unlock_bip39_finalize().
-static bool _is_unlocked_bip39 = false;
 // Stores a random key after bip39-unlock which, after stretching, is used to encrypt the retained
 // bip39 seed.
 static uint8_t _unstretched_retained_bip39_seed_encryption_key[32] = {0};
@@ -65,10 +61,6 @@ static bool _validate_seed_length(size_t seed_len)
 
 bool keystore_copy_seed(uint8_t* seed_out, size_t* length_out)
 {
-    if (!_is_unlocked_device) {
-        return false;
-    }
-
     uint8_t retained_seed_encryption_key[32] = {0};
     UTIL_CLEANUP_32(retained_seed_encryption_key);
     if (!rust_keystore_stretch_retained_seed_encryption_key(
@@ -98,10 +90,6 @@ bool keystore_copy_seed(uint8_t* seed_out, size_t* length_out)
 
 bool keystore_copy_bip39_seed(uint8_t* bip39_seed_out)
 {
-    if (!_is_unlocked_bip39) {
-        return false;
-    }
-
     uint8_t retained_bip39_seed_encryption_key[32] = {0};
     UTIL_CLEANUP_32(retained_bip39_seed_encryption_key);
     if (!rust_keystore_stretch_retained_seed_encryption_key(
@@ -373,7 +361,6 @@ keystore_error_t keystore_encrypt_and_store_seed(
     if (retain_seed_result != KEYSTORE_OK) {
         return retain_seed_result;
     }
-    _is_unlocked_device = true;
 
     return KEYSTORE_OK;
 }
@@ -381,7 +368,7 @@ keystore_error_t keystore_encrypt_and_store_seed(
 // Checks if the retained seed matches the passed seed.
 static bool _check_retained_seed(const uint8_t* seed, size_t seed_length)
 {
-    if (!_is_unlocked_device) {
+    if (!rust_keystore_is_unlocked_device()) {
         return false;
     }
     uint8_t seed_hashed[32] = {0};
@@ -428,7 +415,7 @@ keystore_error_t keystore_unlock(
         return result;
     }
     if (result == KEYSTORE_OK) {
-        if (_is_unlocked_device) {
+        if (rust_keystore_is_unlocked_device()) {
             // Already unlocked. Fail if the seed changed under our feet (should never happen).
             if (!_check_retained_seed(seed, seed_len)) {
                 Abort("Seed has suddenly changed. This should never happen.");
@@ -438,7 +425,6 @@ keystore_error_t keystore_unlock(
             if (retain_seed_result != KEYSTORE_OK) {
                 return retain_seed_result;
             }
-            _is_unlocked_device = true;
         }
         bitbox02_smarteeprom_reset_unlock_attempts();
 
@@ -462,10 +448,6 @@ keystore_error_t keystore_unlock(
 
 bool keystore_unlock_bip39_check(const uint8_t* seed, size_t seed_length)
 {
-    if (!_is_unlocked_device) {
-        return false;
-    }
-
     if (!_check_retained_seed(seed, seed_length)) {
         return false;
     }
@@ -478,21 +460,12 @@ bool keystore_unlock_bip39_finalize(const uint8_t* bip39_seed)
     if (!_retain_bip39_seed(bip39_seed)) {
         return false;
     }
-    _is_unlocked_bip39 = true;
     return true;
 }
 
 void keystore_lock(void)
 {
-    _is_unlocked_device = false;
-    _is_unlocked_bip39 = false;
     _delete_retained_seeds();
-}
-
-bool keystore_is_locked(void)
-{
-    bool unlocked = _is_unlocked_device && _is_unlocked_bip39;
-    return !unlocked;
 }
 
 bool keystore_get_bip39_word_stack(uint16_t idx, char* word_out, size_t word_out_size)
@@ -541,7 +514,6 @@ bool keystore_secp256k1_sign(
 #ifdef TESTING
 void keystore_mock_unlocked(const uint8_t* seed, size_t seed_len)
 {
-    _is_unlocked_device = seed != NULL;
     if (seed != NULL) {
         if (_retain_seed(seed, seed_len) != KEYSTORE_OK) {
             Abort("couldn't retain seed");

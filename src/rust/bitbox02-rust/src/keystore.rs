@@ -33,21 +33,31 @@ use bitcoin::hashes::{Hash, HashEngine, Hmac, HmacEngine, sha256, sha512};
 /// Length of a compressed secp256k1 pubkey.
 const EC_PUBLIC_KEY_LEN: usize = 33;
 
+/// Change this ONLY via unlock() or lock()
+static IS_UNLOCKED_DEVICE: SyncCell<bool> = SyncCell::new(false);
+/// Change this ONLY via unlock_bip39() or lock()
+static IS_UNLOCKED_BIP39: SyncCell<bool> = SyncCell::new(false);
+
 static ROOT_FINGERPRINT: SyncCell<Option<[u8; 4]>> = SyncCell::new(None);
 
 /// Locks the keystore (resets to state before `unlock()`).
 pub fn lock() {
     keystore::_lock();
-    ROOT_FINGERPRINT.write(None)
+    ROOT_FINGERPRINT.write(None);
+    IS_UNLOCKED_DEVICE.write(false);
+    IS_UNLOCKED_BIP39.write(false);
 }
 
 /// Returns false if the keystore is unlocked (unlock() followed by unlock_bip39()), true otherwise.
 pub fn is_locked() -> bool {
-    keystore::_is_locked()
+    let unlocked = IS_UNLOCKED_DEVICE.read() && IS_UNLOCKED_BIP39.read();
+    !unlocked
 }
 
 pub fn unlock(password: &str) -> Result<zeroize::Zeroizing<Vec<u8>>, Error> {
-    keystore::_unlock(password)
+    let seed = keystore::_unlock(password)?;
+    IS_UNLOCKED_DEVICE.write(true);
+    Ok(seed)
 }
 
 /// Unlocks the bip39 seed. The input seed must be the keystore seed (i.e. must match the output
@@ -59,6 +69,9 @@ pub async fn unlock_bip39(
     mnemonic_passphrase: &str,
     yield_now: impl AsyncFn(),
 ) -> Result<(), Error> {
+    if !IS_UNLOCKED_DEVICE.read() {
+        return Err(Error::CannotUnlockBIP39);
+    }
     keystore::unlock_bip39_check(seed)?;
 
     let (bip39_seed, root_fingerprint) =
@@ -73,25 +86,33 @@ pub async fn unlock_bip39(
 
     keystore::unlock_bip39_finalize(bip39_seed.as_slice().try_into().unwrap())?;
 
-    // Store root fingerprint.
+    IS_UNLOCKED_BIP39.write(true);
     ROOT_FINGERPRINT.write(Some(root_fingerprint));
     Ok(())
 }
 
 /// Returns a copy of the retained seed. Errors if the keystore is locked.
 pub fn copy_seed() -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
+    if !IS_UNLOCKED_DEVICE.read() {
+        return Err(());
+    }
     keystore::_copy_seed()
 }
 
 /// Returns a copy of the retained bip39 seed. Errors if the keystore is locked.
 pub fn copy_bip39_seed() -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
+    if !IS_UNLOCKED_BIP39.read() {
+        return Err(());
+    }
     keystore::_copy_bip39_seed()
 }
 
 /// Restores a seed. This also unlocks the keystore with this seed.
 /// `password` is the password with which we encrypt the seed.
 pub fn encrypt_and_store_seed(seed: &[u8], password: &str) -> Result<(), Error> {
-    keystore::_encrypt_and_store_seed(seed, password)
+    keystore::_encrypt_and_store_seed(seed, password)?;
+    IS_UNLOCKED_DEVICE.write(true);
+    Ok(())
 }
 
 /// Generates the seed, mixes it with host_entropy, and stores it encrypted with the
@@ -258,6 +279,16 @@ pub fn stretch_retained_seed_encryption_key(
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_keystore_lock() {
     lock()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_keystore_is_unlocked_device() -> bool {
+    IS_UNLOCKED_DEVICE.read()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_keystore_is_locked() -> bool {
+    is_locked()
 }
 
 /// # Safety
@@ -481,6 +512,7 @@ pub mod testing {
     pub fn mock_unlocked_using_mnemonic(mnemonic: &str, passphrase: &str) {
         let seed = crate::bip39::mnemonic_to_seed(mnemonic).unwrap();
         bitbox02::keystore::mock_unlocked(&seed);
+        super::IS_UNLOCKED_DEVICE.write(true);
         util::bb02_async::block_on(super::unlock_bip39(&seed, passphrase, async || {})).unwrap();
     }
 
