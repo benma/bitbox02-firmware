@@ -29,12 +29,6 @@
 #include <rust/rust.h>
 #include <secp256k1_ecdsa_s2c.h>
 
-// Stores a random key after unlock which, after stretching, is used to encrypt the retained seed.
-static uint8_t _unstretched_retained_seed_encryption_key[32] = {0};
-// Must be defined if is_unlocked is true. ONLY ACCESS THIS WITH keystore_copy_seed().
-// Stores the encrypted seed after unlock.
-static uint8_t _retained_seed_encrypted[KEYSTORE_MAX_SEED_LENGTH + 64] = {0};
-static size_t _retained_seed_encrypted_len = 0;
 // A hash of the unencrypted retained seed, used for comparing seeds without knowing their
 // plaintext.
 static uint8_t _retained_seed_hash[32] = {0};
@@ -49,35 +43,6 @@ static uint8_t _retained_seed_hash[32] = {0};
 static bool _validate_seed_length(size_t seed_len)
 {
     return seed_len == 16 || seed_len == 24 || seed_len == 32;
-}
-
-bool keystore_copy_seed(uint8_t* seed_out, size_t* length_out)
-{
-    uint8_t retained_seed_encryption_key[32] = {0};
-    UTIL_CLEANUP_32(retained_seed_encryption_key);
-    if (!rust_keystore_stretch_retained_seed_encryption_key(
-            rust_util_bytes(
-                _unstretched_retained_seed_encryption_key,
-                sizeof(_unstretched_retained_seed_encryption_key)),
-            "keystore_retained_seed_access_in",
-            "keystore_retained_seed_access_out",
-            rust_util_bytes_mut(
-                retained_seed_encryption_key, sizeof(retained_seed_encryption_key)))) {
-        return false;
-    }
-    size_t len = _retained_seed_encrypted_len - 48;
-    bool password_correct = cipher_aes_hmac_decrypt(
-        _retained_seed_encrypted,
-        _retained_seed_encrypted_len,
-        seed_out,
-        &len,
-        retained_seed_encryption_key);
-    if (!password_correct) {
-        // Should never happen.
-        return false;
-    }
-    *length_out = len;
-    return true;
 }
 
 /**
@@ -180,46 +145,11 @@ static keystore_error_t _hash_seed(const uint8_t* seed, size_t seed_len, uint8_t
 
 USE_RESULT static keystore_error_t _retain_seed(const uint8_t* seed, size_t seed_len)
 {
-#ifdef TESTING
-    const uint8_t test_unstretched_retained_seed_encryption_key[32] =
-        "\xfe\x09\x76\x01\x14\x52\xa7\x22\x12\xe4\xb8\xbd\x57\x2b\x5b\xe3\x01\x41\xa3\x56\xf1\x13"
-        "\x37\xd2\x9d\x35\xea\x8f\xf9\x97\xbe\xfc";
-    memcpy(
-        _unstretched_retained_seed_encryption_key,
-        test_unstretched_retained_seed_encryption_key,
-        32);
-#else
-    random_32_bytes(_unstretched_retained_seed_encryption_key);
-#endif
-    uint8_t retained_seed_encryption_key[32] = {0};
-    UTIL_CLEANUP_32(retained_seed_encryption_key);
-    bool stretched = rust_keystore_stretch_retained_seed_encryption_key(
-        rust_util_bytes(
-            _unstretched_retained_seed_encryption_key,
-            sizeof(_unstretched_retained_seed_encryption_key)),
-        "keystore_retained_seed_access_in",
-        "keystore_retained_seed_access_out",
-        rust_util_bytes_mut(retained_seed_encryption_key, sizeof(retained_seed_encryption_key)));
-    if (!stretched) {
-        return KEYSTORE_ERR_STRETCH_RETAINED_SEED_KEY;
-    }
-    size_t len = seed_len + 64;
-    if (!cipher_aes_hmac_encrypt(
-            seed, seed_len, _retained_seed_encrypted, &len, retained_seed_encryption_key)) {
-        return KEYSTORE_ERR_ENCRYPT;
-    }
-    _retained_seed_encrypted_len = len;
-
     return _hash_seed(seed, seed_len, _retained_seed_hash);
 }
 
 static void _delete_retained_seeds(void)
 {
-    util_zero(
-        _unstretched_retained_seed_encryption_key,
-        sizeof(_unstretched_retained_seed_encryption_key));
-    util_zero(_retained_seed_encrypted, sizeof(_retained_seed_encrypted));
-    _retained_seed_encrypted_len = 0;
     util_zero(_retained_seed_hash, sizeof(_retained_seed_hash));
 }
 
@@ -335,6 +265,9 @@ keystore_error_t keystore_unlock(
             if (retain_seed_result != KEYSTORE_OK) {
                 return retain_seed_result;
             }
+            if (!rust_keystore_retain_seed(rust_util_bytes(seed, seed_len))) {
+                return KEYSTORE_ERR_STRETCH_RETAINED_SEED_KEY;
+            }
         }
         bitbox02_smarteeprom_reset_unlock_attempts();
 
@@ -421,12 +354,6 @@ void keystore_mock_unlocked(const uint8_t* seed, size_t seed_len)
             Abort("couldn't retain seed");
         }
     }
-}
-
-const uint8_t* keystore_test_get_retained_seed_encrypted(size_t* len_out)
-{
-    *len_out = _retained_seed_encrypted_len;
-    return _retained_seed_encrypted;
 }
 
 #endif

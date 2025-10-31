@@ -40,6 +40,7 @@ pub enum Error {
     SeedSize,
     Encrypt,
     Decrypt,
+    StretchRetainedSeedKey,
 }
 
 impl core::convert::From<keystore_error_t> for Error {
@@ -54,6 +55,9 @@ impl core::convert::From<keystore_error_t> for Error {
             keystore_error_t::KEYSTORE_ERR_HASH => Error::Hash,
             keystore_error_t::KEYSTORE_ERR_ENCRYPT => Error::Encrypt,
             keystore_error_t::KEYSTORE_ERR_DECRYPT => Error::Decrypt,
+            keystore_error_t::KEYSTORE_ERR_STRETCH_RETAINED_SEED_KEY => {
+                Error::StretchRetainedSeedKey
+            }
             _ => panic!("cannot convert error"),
         }
     }
@@ -97,27 +101,6 @@ pub fn unlock_bip39_check(seed: &[u8]) -> Result<(), Error> {
         Ok(())
     } else {
         Err(Error::CannotUnlockBIP39)
-    }
-}
-
-#[cfg(feature = "testing")]
-pub fn test_get_retained_seed_encrypted() -> &'static [u8] {
-    unsafe {
-        let mut len = 0usize;
-        let ptr = bitbox02_sys::keystore_test_get_retained_seed_encrypted(&mut len);
-        core::slice::from_raw_parts(ptr, len)
-    }
-}
-
-pub fn _copy_seed() -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
-    let mut seed = zeroize::Zeroizing::new([0u8; MAX_SEED_LENGTH].to_vec());
-    let mut seed_len: usize = 0;
-    match unsafe { bitbox02_sys::keystore_copy_seed(seed.as_mut_ptr(), &mut seed_len) } {
-        true => {
-            seed.truncate(seed_len);
-            Ok(seed)
-        }
-        false => Err(()),
     }
 }
 

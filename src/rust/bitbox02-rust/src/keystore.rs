@@ -106,7 +106,8 @@ impl RetainedEncryptedBuffer {
 }
 
 /// Change this ONLY via unlock() or lock()
-static IS_UNLOCKED_DEVICE: SyncCell<bool> = SyncCell::new(false);
+// Stores the encrypted seed after unlock.
+static RETAINED_SEED: SyncCell<Option<RetainedEncryptedBuffer>> = SyncCell::new(None);
 // Stores the encrypted BIP-39 seed after bip39-unlock.
 static RETAINED_BIP39_SEED: SyncCell<Option<RetainedEncryptedBuffer>> = SyncCell::new(None);
 
@@ -116,19 +117,26 @@ static ROOT_FINGERPRINT: SyncCell<Option<[u8; 4]>> = SyncCell::new(None);
 pub fn lock() {
     keystore::_lock();
     ROOT_FINGERPRINT.write(None);
-    IS_UNLOCKED_DEVICE.write(false);
+    RETAINED_SEED.write(None);
     RETAINED_BIP39_SEED.write(None);
 }
 
 /// Returns false if the keystore is unlocked (unlock() followed by unlock_bip39()), true otherwise.
 pub fn is_locked() -> bool {
-    let unlocked = IS_UNLOCKED_DEVICE.read() && RETAINED_BIP39_SEED.read().is_some();
+    let unlocked = RETAINED_SEED.read().is_some() && RETAINED_BIP39_SEED.read().is_some();
     !unlocked
+}
+
+fn retain_seed(seed: &[u8]) -> Result<(), Error> {
+    RETAINED_SEED.write(Some(RetainedEncryptedBuffer::from_buffer(
+        seed,
+        "keystore_retained_seed_access",
+    )?));
+    Ok(())
 }
 
 pub fn unlock(password: &str) -> Result<zeroize::Zeroizing<Vec<u8>>, Error> {
     let seed = keystore::_unlock(password)?;
-    IS_UNLOCKED_DEVICE.write(true);
     Ok(seed)
 }
 
@@ -141,7 +149,7 @@ pub async fn unlock_bip39(
     mnemonic_passphrase: &str,
     yield_now: impl AsyncFn(),
 ) -> Result<(), Error> {
-    if !IS_UNLOCKED_DEVICE.read() {
+    if !RETAINED_SEED.read().is_some() {
         return Err(Error::CannotUnlockBIP39);
     }
     keystore::unlock_bip39_check(seed)?;
@@ -156,13 +164,10 @@ pub async fn unlock_bip39(
         return Err(Error::Memory);
     }
 
-    RETAINED_BIP39_SEED.write(Some(
-        RetainedEncryptedBuffer::from_buffer(
-            bip39_seed.as_slice(),
-            "keystore_retained_bip39_seed_access",
-        )
-        .map_err(|_| Error::CannotUnlockBIP39)?,
-    ));
+    RETAINED_BIP39_SEED.write(Some(RetainedEncryptedBuffer::from_buffer(
+        bip39_seed.as_slice(),
+        "keystore_retained_bip39_seed_access",
+    )?));
 
     ROOT_FINGERPRINT.write(Some(root_fingerprint));
     Ok(())
@@ -170,10 +175,7 @@ pub async fn unlock_bip39(
 
 /// Returns a copy of the retained seed. Errors if the keystore is locked.
 pub fn copy_seed() -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
-    if !IS_UNLOCKED_DEVICE.read() {
-        return Err(());
-    }
-    keystore::_copy_seed()
+    RETAINED_SEED.read().ok_or(())?.decrypt().map_err(|_| ())
 }
 
 /// Returns a copy of the retained bip39 seed. Errors if the keystore is locked.
@@ -189,7 +191,7 @@ pub fn copy_bip39_seed() -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
 /// `password` is the password with which we encrypt the seed.
 pub fn encrypt_and_store_seed(seed: &[u8], password: &str) -> Result<(), Error> {
     keystore::_encrypt_and_store_seed(seed, password)?;
-    IS_UNLOCKED_DEVICE.write(true);
+    retain_seed(seed)?;
     Ok(())
 }
 
@@ -361,7 +363,16 @@ pub extern "C" fn rust_keystore_lock() {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_keystore_is_unlocked_device() -> bool {
-    IS_UNLOCKED_DEVICE.read()
+    RETAINED_SEED.read().is_some()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_keystore_retain_seed(seed: util::bytes::Bytes) -> bool {
+    if retain_seed(seed.as_ref()).is_ok() {
+        true
+    } else {
+        false
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -590,7 +601,7 @@ pub mod testing {
     pub fn mock_unlocked_using_mnemonic(mnemonic: &str, passphrase: &str) {
         let seed = crate::bip39::mnemonic_to_seed(mnemonic).unwrap();
         bitbox02::keystore::mock_unlocked(&seed);
-        super::IS_UNLOCKED_DEVICE.write(true);
+        super::retain_seed(&seed).unwrap();
         util::bb02_async::block_on(super::unlock_bip39(&seed, passphrase, async || {})).unwrap();
     }
 
@@ -775,12 +786,14 @@ mod tests {
 
         // Also check that the retained seed was encrypted with the expected encryption key.
         let decrypted = {
-            let retained_seed_encrypted: &[u8] = keystore::test_get_retained_seed_encrypted();
             let expected_retained_seed_secret =
                 hex::decode("b156be416530c6fc00018844161774a3546a53ac6dd4a0462608838e216008f7")
                     .unwrap();
-            bitbox_aes::decrypt_with_hmac(&expected_retained_seed_secret, retained_seed_encrypted)
-                .unwrap()
+            bitbox_aes::decrypt_with_hmac(
+                &expected_retained_seed_secret,
+                RETAINED_SEED.read().unwrap().encrypted_seed.as_slice(),
+            )
+            .unwrap()
         };
         assert_eq!(decrypted.as_slice(), seed.as_slice());
 
