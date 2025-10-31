@@ -33,16 +33,21 @@ use bitcoin::hashes::{Hash, HashEngine, Hmac, HmacEngine, sha256, sha512};
 /// Length of a compressed secp256k1 pubkey.
 const EC_PUBLIC_KEY_LEN: usize = 33;
 
+/// aes256cbc-hmac cipher adds 16 bytes IV, 16 bytes padding, 32 bytes hmac.
+const ENCRYPTION_OVERHEAD: usize = 64;
+
 #[derive(Copy, Clone)]
-struct Buffer<const N: usize> {
-    data: [u8; N],
+struct Buffer {
+    // 64 is the biggest retained buffer (bip39 seed) we will store, and 64 is added for the
+    // aes256cbc-hmac overhead.
+    data: [u8; 64 + ENCRYPTION_OVERHEAD],
     len: usize,
 }
 
-impl<const N: usize> Buffer<N> {
+impl Buffer {
     fn from_slice(data: &[u8]) -> Self {
         let mut result = Buffer {
-            data: [0; N],
+            data: [0; 64 + ENCRYPTION_OVERHEAD],
             len: data.len(),
         };
         result.data[..data.len()].copy_from_slice(data);
@@ -54,22 +59,58 @@ impl<const N: usize> Buffer<N> {
     }
 }
 
+/// Helper struct for retaining the seed and bip39 seed.
 #[derive(Copy, Clone)]
-struct RetainedEncryptedBuffer<const N: usize> {
+struct RetainedEncryptedBuffer {
+    // Stores a random key which, after stretching, is used to encrypt the retained (bip39) seed.
     unstretched_encryption_key: [u8; 32],
-    encrypted_seed: Buffer<N>,
+    // Stores the encrypted (bip39) seed using aes256cbc.
+    encrypted_seed: Buffer,
+    purpose: &'static str,
+}
+
+impl RetainedEncryptedBuffer {
+    fn from_buffer(data: &[u8], purpose: &'static str) -> Result<Self, Error> {
+        #[cfg(feature="testing")]
+        let rand: [u8; 32] = *b"\xfe\x09\x76\x01\x14\x52\xa7\x22\x12\xe4\xb8\xbd\x57\x2b\x5b\xe3\x01\x41\xa3\x56\xf1\x13\x37\xd2\x9d\x35\xea\x8f\xf9\x97\xbe\xfc";
+        #[cfg(not(feature = "testing"))]
+        let rand: [u8; 32] = bitbox02::random::random_32_bytes()
+            .as_slice()
+            .try_into()
+            .unwrap();
+        let encryption_key = stretch_retained_seed_encryption_key(
+            &rand,
+            &format!("{}_in", purpose),
+            &format!("{}_out", purpose),
+        )?;
+        let iv: [u8; 16] = bitbox02::random::random_32_bytes()[..16]
+            .try_into()
+            .unwrap();
+        let encrypted = bitbox_aes::encrypt_with_hmac(&iv, &encryption_key, data);
+        Ok(RetainedEncryptedBuffer {
+            unstretched_encryption_key: rand,
+            encrypted_seed: Buffer::from_slice(&encrypted),
+            purpose,
+        })
+    }
+
+    fn decrypt(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, Error> {
+        let encryption_key = stretch_retained_seed_encryption_key(
+            &self.unstretched_encryption_key,
+            &format!("{}_in", self.purpose),
+            &format!("{}_out", self.purpose),
+        )?;
+        bitbox_aes::decrypt_with_hmac(&encryption_key, self.encrypted_seed.as_slice())
+            .map_err(|_| Error::Decrypt)
+    }
 }
 
 /// Change this ONLY via unlock() or lock()
 static IS_UNLOCKED_DEVICE: SyncCell<bool> = SyncCell::new(false);
 /// Change this ONLY via unlock_bip39() or lock()
 static IS_UNLOCKED_BIP39: SyncCell<bool> = SyncCell::new(false);
-// Stores a random key after bip39-unlock which, after stretching, is used to encrypt the retained
-// bip39 seed.
-static RETAINED_BIP39_SEED: SyncCell<Option<RetainedEncryptedBuffer<128>>> = SyncCell::new(None);
-// // Must be defined if _is_unlocked is true. ONLY ACCESS THIS WITH copy_bip39_seed().
-// // Stores the encrypted BIP-39 seed after bip39-unlock.
-// static RETAINED_BIP39_SEED_ENCRYPTED: SyncCell<Option<Buffer<128>>> = SyncCell::new(None);
+// Stores the encrypted BIP-39 seed after bip39-unlock.
+static RETAINED_BIP39_SEED: SyncCell<Option<RetainedEncryptedBuffer>> = SyncCell::new(None);
 
 static ROOT_FINGERPRINT: SyncCell<Option<[u8; 4]>> = SyncCell::new(None);
 
@@ -92,34 +133,6 @@ pub fn unlock(password: &str) -> Result<zeroize::Zeroizing<Vec<u8>>, Error> {
     let seed = keystore::_unlock(password)?;
     IS_UNLOCKED_DEVICE.write(true);
     Ok(seed)
-}
-
-fn retain_bip39_seed(bip39_seed: &[u8; 64]) -> Result<(), ()> {
-    #[cfg(feature="testing")]
-    let rand: [u8; 32] = *b"\xfe\x09\x76\x01\x14\x52\xa7\x22\x12\xe4\xb8\xbd\x57\x2b\x5b\xe3\x01\x41\xa3\x56\xf1\x13\x37\xd2\x9d\x35\xea\x8f\xf9\x97\xbe\xfc";
-    #[cfg(not(feature = "testing"))]
-    let rand: [u8; 32] = bitbox02::random::random_32_bytes()
-        .as_slice()
-        .try_into()
-        .unwrap();
-    let retained_bip39_seed_encryption_key = stretch_retained_seed_encryption_key(
-        &rand,
-        "keystore_retained_bip39_seed_access_in",
-        "keystore_retained_bip39_seed_access_out",
-    )
-    .map_err(|_| ())?;
-    let encrypted = bitbox_aes::encrypt_with_hmac(
-        &bitbox02::random::random_32_bytes()[..16]
-            .try_into()
-            .unwrap(),
-        &retained_bip39_seed_encryption_key,
-        bip39_seed,
-    );
-    RETAINED_BIP39_SEED.write(Some(RetainedEncryptedBuffer {
-        unstretched_encryption_key: rand,
-        encrypted_seed: Buffer::from_slice(&encrypted),
-    }));
-    Ok(())
 }
 
 /// Unlocks the bip39 seed. The input seed must be the keystore seed (i.e. must match the output
@@ -146,7 +159,13 @@ pub async fn unlock_bip39(
         return Err(Error::Memory);
     }
 
-    retain_bip39_seed(&bip39_seed).map_err(|_| Error::CannotUnlockBIP39)?;
+    RETAINED_BIP39_SEED.write(Some(
+        RetainedEncryptedBuffer::from_buffer(
+            bip39_seed.as_slice(),
+            "keystore_retained_bip39_seed_access",
+        )
+        .map_err(|_| Error::CannotUnlockBIP39)?,
+    ));
 
     IS_UNLOCKED_BIP39.write(true);
     ROOT_FINGERPRINT.write(Some(root_fingerprint));
@@ -167,23 +186,11 @@ pub fn copy_bip39_seed() -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
         return Err(());
     }
 
-    let retained_bip39_seed = RETAINED_BIP39_SEED.read().ok_or(())?;
-
-    let retained_bip39_seed_encryption_key = stretch_retained_seed_encryption_key(
-        &retained_bip39_seed.unstretched_encryption_key,
-        "keystore_retained_bip39_seed_access_in",
-        "keystore_retained_bip39_seed_access_out",
-    )
-    .map_err(|_| ())?;
-    let decrypted = bitbox_aes::decrypt_with_hmac(
-        &retained_bip39_seed_encryption_key,
-        retained_bip39_seed.encrypted_seed.as_slice(),
-    )?;
-    if decrypted.len() != 64 {
-        // Should never happen.
-        return Err(());
-    }
-    Ok(decrypted)
+    RETAINED_BIP39_SEED
+        .read()
+        .ok_or(())?
+        .decrypt()
+        .map_err(|_| ())
 }
 
 /// Restores a seed. This also unlocks the keystore with this seed.

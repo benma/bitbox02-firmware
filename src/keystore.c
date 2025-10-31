@@ -421,7 +421,6 @@ void keystore_mock_unlocked(const uint8_t* seed, size_t seed_len)
             Abort("couldn't retain seed");
         }
     }
-    _is_unlocked_bip39 = false;
 }
 
 const uint8_t* keystore_test_get_retained_seed_encrypted(size_t* len_out)

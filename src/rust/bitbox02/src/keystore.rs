@@ -39,6 +39,7 @@ pub enum Error {
     Hash,
     SeedSize,
     Encrypt,
+    Decrypt,
 }
 
 impl core::convert::From<keystore_error_t> for Error {
@@ -52,6 +53,7 @@ impl core::convert::From<keystore_error_t> for Error {
             keystore_error_t::KEYSTORE_ERR_SALT => Error::Salt,
             keystore_error_t::KEYSTORE_ERR_HASH => Error::Hash,
             keystore_error_t::KEYSTORE_ERR_ENCRYPT => Error::Encrypt,
+            keystore_error_t::KEYSTORE_ERR_DECRYPT => Error::Decrypt,
             _ => panic!("cannot convert error"),
         }
     }
