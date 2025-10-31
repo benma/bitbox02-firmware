@@ -107,8 +107,6 @@ impl RetainedEncryptedBuffer {
 
 /// Change this ONLY via unlock() or lock()
 static IS_UNLOCKED_DEVICE: SyncCell<bool> = SyncCell::new(false);
-/// Change this ONLY via unlock_bip39() or lock()
-static IS_UNLOCKED_BIP39: SyncCell<bool> = SyncCell::new(false);
 // Stores the encrypted BIP-39 seed after bip39-unlock.
 static RETAINED_BIP39_SEED: SyncCell<Option<RetainedEncryptedBuffer>> = SyncCell::new(None);
 
@@ -119,13 +117,12 @@ pub fn lock() {
     keystore::_lock();
     ROOT_FINGERPRINT.write(None);
     IS_UNLOCKED_DEVICE.write(false);
-    IS_UNLOCKED_BIP39.write(false);
     RETAINED_BIP39_SEED.write(None);
 }
 
 /// Returns false if the keystore is unlocked (unlock() followed by unlock_bip39()), true otherwise.
 pub fn is_locked() -> bool {
-    let unlocked = IS_UNLOCKED_DEVICE.read() && IS_UNLOCKED_BIP39.read();
+    let unlocked = IS_UNLOCKED_DEVICE.read() && RETAINED_BIP39_SEED.read().is_some();
     !unlocked
 }
 
@@ -167,7 +164,6 @@ pub async fn unlock_bip39(
         .map_err(|_| Error::CannotUnlockBIP39)?,
     ));
 
-    IS_UNLOCKED_BIP39.write(true);
     ROOT_FINGERPRINT.write(Some(root_fingerprint));
     Ok(())
 }
@@ -182,10 +178,6 @@ pub fn copy_seed() -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
 
 /// Returns a copy of the retained bip39 seed. Errors if the keystore is locked.
 pub fn copy_bip39_seed() -> Result<zeroize::Zeroizing<Vec<u8>>, ()> {
-    if !IS_UNLOCKED_BIP39.read() {
-        return Err(());
-    }
-
     RETAINED_BIP39_SEED
         .read()
         .ok_or(())?
