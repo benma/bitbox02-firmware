@@ -110,14 +110,17 @@ impl RetainedEncryptedBuffer {
 static RETAINED_SEED: SyncCell<Option<RetainedEncryptedBuffer>> = SyncCell::new(None);
 // Stores the encrypted BIP-39 seed after bip39-unlock.
 static RETAINED_BIP39_SEED: SyncCell<Option<RetainedEncryptedBuffer>> = SyncCell::new(None);
+// A hash of the unencrypted retained seed, used for comparing seeds without knowing their
+// plaintext.
+static RETAINED_SEED_HASH: SyncCell<Option<[u8; 32]>> = SyncCell::new(None);
 
 static ROOT_FINGERPRINT: SyncCell<Option<[u8; 4]>> = SyncCell::new(None);
 
 /// Locks the keystore (resets to state before `unlock()`).
 pub fn lock() {
-    keystore::_lock();
     ROOT_FINGERPRINT.write(None);
     RETAINED_SEED.write(None);
+    RETAINED_SEED_HASH.write(None);
     RETAINED_BIP39_SEED.write(None);
 }
 
@@ -127,11 +130,32 @@ pub fn is_locked() -> bool {
     !unlocked
 }
 
+fn hash_seed(seed: &[u8]) -> Result<[u8; 32], Error> {
+    let salted_key =
+        crate::salt::hash_data(&[], "keystore_retain_seed_hash").map_err(|_| Error::Salt)?;
+
+    let mut engine = HmacEngine::<sha256::Hash>::new(salted_key.as_slice());
+    engine.input(seed);
+    Ok(Hmac::<sha256::Hash>::from_engine(engine).to_byte_array())
+}
+
 fn retain_seed(seed: &[u8]) -> Result<(), Error> {
     RETAINED_SEED.write(Some(RetainedEncryptedBuffer::from_buffer(
         seed,
         "keystore_retained_seed_access",
     )?));
+    RETAINED_SEED_HASH.write(Some(hash_seed(seed)?));
+    Ok(())
+}
+
+// Checks if the retained seed matches the passed seed.
+fn check_retained_seed(seed: &[u8]) -> Result<(), ()> {
+    if !RETAINED_SEED.read().is_some() {
+        return Err(());
+    }
+    if hash_seed(seed).map_err(|_| ())? != RETAINED_SEED_HASH.read().ok_or(())? {
+        return Err(());
+    }
     Ok(())
 }
 
@@ -152,7 +176,7 @@ pub async fn unlock_bip39(
     if !RETAINED_SEED.read().is_some() {
         return Err(Error::CannotUnlockBIP39);
     }
-    keystore::unlock_bip39_check(seed)?;
+    check_retained_seed(seed).map_err(|_| Error::CannotUnlockBIP39)?;
 
     let (bip39_seed, root_fingerprint) =
         crate::bip39::derive_seed(seed, mnemonic_passphrase, &yield_now).await;
@@ -373,6 +397,11 @@ pub extern "C" fn rust_keystore_retain_seed(seed: util::bytes::Bytes) -> bool {
     } else {
         false
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_keystore_check_retained_seed(seed: util::bytes::Bytes) -> bool {
+    check_retained_seed(seed.as_ref()).is_ok()
 }
 
 #[unsafe(no_mangle)]
@@ -600,7 +629,6 @@ pub mod testing {
     /// This mocks an unlocked keystore with the given bip39 recovery words and bip39 passphrase.
     pub fn mock_unlocked_using_mnemonic(mnemonic: &str, passphrase: &str) {
         let seed = crate::bip39::mnemonic_to_seed(mnemonic).unwrap();
-        bitbox02::keystore::mock_unlocked(&seed);
         super::retain_seed(&seed).unwrap();
         util::bb02_async::block_on(super::unlock_bip39(&seed, passphrase, async || {})).unwrap();
     }
