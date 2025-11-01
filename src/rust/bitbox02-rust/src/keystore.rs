@@ -740,7 +740,7 @@ mod tests {
             let retained_bip39_seed_encrypted: &[u8] =
                 keystore::test_get_retained_bip39_seed_encrypted();
             let expected_retained_bip39_seed_secret =
-                hex::decode("856d9a8c1ea42a69ae76324244ace674397ff1360a4ba4c85ffbd42cee8a7f29")
+                hex::decode("5ba39f8c7d08fac6262f6ff410aba7623d8b28b9c4a323b84fc06b5c471fd232")
                     .unwrap();
             bitbox_aes::decrypt_with_hmac(
                 &expected_retained_bip39_seed_secret,
