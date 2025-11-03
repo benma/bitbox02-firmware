@@ -15,10 +15,15 @@
 use crate::workflow::RealWorkflows;
 pub use crate::workflow::Workflows as Ui;
 
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
 use futures_lite::future::yield_now;
+
+pub trait Random {
+    fn random_32_bytes(&mut self) -> Box<zeroize::Zeroizing<[u8; 32]>>;
+}
 
 #[allow(async_fn_in_trait)]
 pub trait Sd {
@@ -37,6 +42,7 @@ pub trait Sd {
 pub trait Hal {
     fn ui(&mut self) -> &mut impl Ui;
     fn sd(&mut self) -> &mut impl Sd;
+    fn random(&mut self) -> &mut impl Random;
 }
 
 pub struct BitBox02Sd;
@@ -82,9 +88,19 @@ impl Sd for BitBox02Sd {
     }
 }
 
+pub struct BitBox02Random;
+
+impl Random for BitBox02Random {
+    #[inline(always)]
+    fn random_32_bytes(&mut self) -> Box<zeroize::Zeroizing<[u8; 32]>> {
+        bitbox02::random::random_32_bytes()
+    }
+}
+
 pub struct BitBox02Hal {
     ui: RealWorkflows,
     sd: BitBox02Sd,
+    random: BitBox02Random,
 }
 
 impl BitBox02Hal {
@@ -92,6 +108,7 @@ impl BitBox02Hal {
         Self {
             ui: crate::workflow::RealWorkflows,
             sd: BitBox02Sd,
+            random: BitBox02Random,
         }
     }
 }
@@ -103,13 +120,37 @@ impl Hal for BitBox02Hal {
     fn sd(&mut self) -> &mut impl Sd {
         &mut self.sd
     }
+    fn random(&mut self) -> &mut impl Random {
+        &mut self.random
+    }
 }
 
 #[cfg(feature = "testing")]
 pub mod testing {
     use alloc::collections::BTreeMap;
+    use alloc::boxed::Box;
     use alloc::string::String;
     use alloc::vec::Vec;
+
+    use bitcoin::hashes::{sha256, Hash};
+
+    pub struct TestingRandom {
+        counter: u64,
+    }
+
+    impl TestingRandom {
+        pub fn new() -> Self {
+            Self { counter: 0 }
+        }
+    }
+
+    impl super::Random for TestingRandom {
+        fn random_32_bytes(&mut self) -> Box<zeroize::Zeroizing<[u8; 32]>> {
+            self.counter = self.counter.wrapping_add(1);
+            let hash = sha256::Hash::hash(&self.counter.to_be_bytes());
+            Box::new(zeroize::Zeroizing::new(hash.to_byte_array()))
+        }
+    }
 
     pub struct TestingSd {
         pub inserted: Option<bool>,
@@ -172,6 +213,7 @@ pub mod testing {
     pub struct TestingHal<'a> {
         pub ui: crate::workflow::testing::TestingWorkflows<'a>,
         pub sd: TestingSd,
+        pub random: TestingRandom,
     }
 
     impl TestingHal<'_> {
@@ -179,6 +221,7 @@ pub mod testing {
             Self {
                 ui: crate::workflow::testing::TestingWorkflows::new(),
                 sd: TestingSd::new(),
+                random: TestingRandom::new(),
             }
         }
     }
@@ -190,12 +233,16 @@ pub mod testing {
         fn sd(&mut self) -> &mut impl super::Sd {
             &mut self.sd
         }
+        fn random(&mut self) -> &mut impl super::Random {
+            &mut self.random
+        }
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::hal::Sd;
+        use crate::hal::{Random, Sd};
+        use hex_lit::hex;
 
         use util::bb02_async::block_on;
 
@@ -229,6 +276,22 @@ pub mod testing {
             assert!(block_on(sd.erase_file_in_subdir("doesnt-exist.txt", "dir1")).is_err());
             assert!(block_on(sd.erase_file_in_subdir("file1.txt", "dir1")).is_ok());
             assert_eq!(block_on(sd.list_subdir(Some("dir1"))), Ok(vec![]));
+        }
+
+        #[test]
+        fn test_testing_random() {
+            let mut random = TestingRandom::new();
+            let first = random.random_32_bytes();
+            let second = random.random_32_bytes();
+            assert_eq!(
+                first.as_slice(),
+                &hex!("cd2662154e6d76b2b2b92e70c0cac3ccf534f9b74eb5b89819ec509083d00a50")
+            );
+            assert_eq!(
+                second.as_slice(),
+                &hex!("cd04a4754498e06db5a13c5f371f1f04ff6d2470f24aa9bd886540e5dce77f70")
+            );
+            assert_ne!(first.as_slice(), second.as_slice());
         }
     }
 }

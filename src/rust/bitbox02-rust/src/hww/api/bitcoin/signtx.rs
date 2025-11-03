@@ -1195,6 +1195,7 @@ async fn _process(
 
             next_response.next.has_signature = true;
             next_response.next.signature = crate::keystore::secp256k1_schnorr_sign(
+                hal.random(),
                 &tx_input.keypath,
                 &sighash,
                 if let TaprootSpendInfo::KeySpend(tweak_hash) = &spend_info {
@@ -2155,7 +2156,6 @@ mod tests {
             }));
 
         mock_unlocked();
-        bitbox02::random::fake_reset();
         let mut init_request = transaction.borrow().init_request();
         init_request.script_configs[0] = pb::BtcScriptConfigWithKeypath {
             script_config: Some(pb::BtcScriptConfig {
@@ -2172,7 +2172,7 @@ mod tests {
                 assert_eq!(
                     next.signature,
                     hex!(
-                        "472ef2aa293d5697649a5364d40567d6eaf508fca9e51321c5a48de42c32b4bbc2d0cee4ab6fea1f3b137a1cbca2abe72aa945c50e95e02fa8ac354fddf2ca10"
+                        "e05aa262c38dc8d76b557c77df2d310260d4ce86e1cd3ab2d40c752f80436758e143c74fdd5aec53822ad105df64f94608b142f24c3bc152a5a4346a3b430ecb"
                     )
                 );
             }
@@ -3227,7 +3227,6 @@ mod tests {
             "sudden tenant fault inject concert weather maid people chunk youth stumble grit",
             "",
         );
-        bitbox02::random::fake_reset();
         // For the policy registration below.
         mock_memory();
 
@@ -3390,7 +3389,7 @@ mod tests {
                 assert_eq!(
                     next.signature,
                     hex!(
-                        "f4b760fa7f1ca8a00149bf439c07dcd3aafe4c98111607cece4b80066f7ef2e4406d18831990def0bf4a5b5647dc426ef1f749524adf0a6896844cd90b796031"
+                        "5cc34166ec237a23d183b08ec453127f6ed723df3557a3364dd3f9c28a60707ff46fa3a891058e1f1f1373bb4dc35e6e2569ba7ca961f84050dbc8d8811ca749"
                     )
                 );
             }
@@ -3710,7 +3709,6 @@ mod tests {
 
         mock_host_responder(transaction.clone());
         mock_unlocked();
-        bitbox02::random::fake_reset();
         let init_request = transaction.borrow().init_request();
 
         let mut mock_hal = TestingHal::new();
@@ -3789,7 +3787,6 @@ mod tests {
 
         mock_host_responder(transaction.clone());
         mock_unlocked();
-        bitbox02::random::fake_reset();
         let init_request = transaction.borrow().init_request();
 
         let mut mock_hal = TestingHal::new();
@@ -3829,7 +3826,6 @@ mod tests {
 
         mock_host_responder(transaction.clone());
         mock_unlocked();
-        bitbox02::random::fake_reset();
         let init_request = transaction.borrow().init_request();
 
         let mut mock_hal = TestingHal::new();
@@ -3861,7 +3857,6 @@ mod tests {
 
         mock_host_responder(transaction.clone());
         mock_unlocked();
-        bitbox02::random::fake_reset();
         let init_request = transaction.borrow().init_request();
 
         let mut mock_hal = TestingHal::new();
