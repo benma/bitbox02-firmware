@@ -216,7 +216,7 @@ USE_RESULT static keystore_error_t _retain_seed(const uint8_t* seed, size_t seed
 #else
     random_32_bytes(_unstretched_retained_seed_encryption_key);
 #endif
-    uint8_t retained_seed_encryption_key[32] = {0};
+    uint8_t retained_seed_encryption_key[32] = {  0};
     UTIL_CLEANUP_32(retained_seed_encryption_key);
     bool stretched = rust_keystore_stretch_retained_seed_encryption_key(
         rust_util_bytes(
