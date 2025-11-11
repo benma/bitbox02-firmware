@@ -885,8 +885,7 @@ mod tests {
         for i in 1..bitbox02::memory::MAX_UNLOCK_ATTEMPTS {
             assert!(matches!(
                 unlock("invalid password"),
-                Err(Error::IncorrectPassword { remaining_attempts }) if remaining_attempts
-                    == bitbox02::memory::MAX_UNLOCK_ATTEMPTS  - i
+                Err(Error::IncorrectPassword)
             ));
             assert_eq!(
                 get_remaining_unlock_attempts(),
@@ -926,8 +925,7 @@ mod tests {
         for attempt in 1..bitbox02::memory::MAX_UNLOCK_ATTEMPTS {
             assert!(matches!(
                 unlock("invalid password"),
-                Err(Error::IncorrectPassword { remaining_attempts })
-                    if remaining_attempts == bitbox02::memory::MAX_UNLOCK_ATTEMPTS - attempt
+                Err(Error::IncorrectPassword),
             ));
 
             assert_eq!(
@@ -998,11 +996,7 @@ mod tests {
         lock();
 
         let wrong_attempt = || {
-            assert!(matches!(
-                unlock("wrong"),
-                Err(Error::IncorrectPassword { remaining_attempts })
-                    if remaining_attempts == bitbox02::memory::MAX_UNLOCK_ATTEMPTS - 1
-            ));
+            assert!(matches!(unlock("wrong"), Err(Error::IncorrectPassword)));
             assert_eq!(
                 get_remaining_unlock_attempts(),
                 bitbox02::memory::MAX_UNLOCK_ATTEMPTS - 1
@@ -1042,11 +1036,7 @@ mod tests {
         assert!(copy_seed().is_ok());
 
         let wrong_attempt = || {
-            assert!(matches!(
-                unlock("wrong"),
-                Err(Error::IncorrectPassword { remaining_attempts })
-                    if remaining_attempts == bitbox02::memory::MAX_UNLOCK_ATTEMPTS - 1
-            ));
+            assert!(matches!(unlock("wrong"), Err(Error::IncorrectPassword)));
             assert_eq!(
                 get_remaining_unlock_attempts(),
                 bitbox02::memory::MAX_UNLOCK_ATTEMPTS - 1
@@ -1705,12 +1695,7 @@ mod tests {
             assert!(copy_seed().is_err());
 
             // Wrong password.
-            assert!(matches!(
-                unlock("bar"),
-                Err(Error::IncorrectPassword {
-                    remaining_attempts: 9
-                })
-            ));
+            assert!(matches!(unlock("bar"), Err(Error::IncorrectPassword)));
             assert_eq!(get_remaining_unlock_attempts(), 9);
 
             // Correct password. First time: unlock. After unlock, it becomes a password check.
