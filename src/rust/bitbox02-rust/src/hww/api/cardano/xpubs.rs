@@ -24,12 +24,15 @@ use super::keypath::validate_account_shelley;
 /// Return the xpub at the request keypath.
 ///
 /// 64 bytes: 32 bytes public key + 32 bytes chain code.
-pub fn process(request: &pb::CardanoXpubsRequest) -> Result<Response, Error> {
+pub fn process(
+    hal: &mut impl crate::hal::Hal,
+    request: &pb::CardanoXpubsRequest,
+) -> Result<Response, Error> {
     let mut xpubs: Vec<Vec<u8>> = Vec::with_capacity(request.keypaths.len());
     for pb::Keypath { keypath } in &request.keypaths {
         validate_account_shelley(keypath)?;
 
-        let xpub = crate::keystore::ed25519::get_xpub(keypath)?;
+        let xpub = crate::keystore::ed25519::get_xpub(hal, keypath)?;
         let mut xpub_bytes = Vec::with_capacity(64);
         xpub_bytes.extend_from_slice(xpub.pubkey_bytes());
         xpub_bytes.extend_from_slice(xpub.chain_code());
@@ -42,6 +45,7 @@ pub fn process(request: &pb::CardanoXpubsRequest) -> Result<Response, Error> {
 mod tests {
     use super::*;
 
+    use crate::hal::testing::TestingHal;
     use crate::keystore::testing::mock_unlocked;
     use util::bip32::HARDENED;
 
@@ -49,13 +53,13 @@ mod tests {
     fn test_process() {
         crate::keystore::lock();
         assert_eq!(
-            process(&pb::CardanoXpubsRequest { keypaths: vec![] }),
+            process(&mut TestingHal::new(), &pb::CardanoXpubsRequest { keypaths: vec![] }),
             Ok(Response::Xpubs(pb::CardanoXpubsResponse { xpubs: vec![] })),
         );
 
         // Locked.
         assert_eq!(
-            process(&pb::CardanoXpubsRequest {
+            process(&mut TestingHal::new(), &pb::CardanoXpubsRequest {
                 keypaths: vec![pb::Keypath {
                     keypath: vec![1852 + HARDENED, 1815 + HARDENED, HARDENED]
                 }],
@@ -65,7 +69,7 @@ mod tests {
 
         mock_unlocked();
         assert_eq!(
-            process(&pb::CardanoXpubsRequest {
+            process(&mut TestingHal::new(), &pb::CardanoXpubsRequest {
                 keypaths: vec![
                     pb::Keypath {
                         keypath: vec![1852 + HARDENED, 1815 + HARDENED, HARDENED]
@@ -111,7 +115,7 @@ mod tests {
         ];
         for invalid_keypath in invalid_keypaths {
             assert_eq!(
-                process(&pb::CardanoXpubsRequest {
+                process(&mut TestingHal::new(), &pb::CardanoXpubsRequest {
                     keypaths: vec![pb::Keypath {
                         keypath: invalid_keypath.to_vec(),
                     },],

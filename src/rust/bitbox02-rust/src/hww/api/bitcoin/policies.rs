@@ -50,7 +50,11 @@ fn check_enabled(coin: BtcCoin) -> Result<(), Error> {
 
 /// Checks if the key is our key by comparing the root fingerprints
 /// and deriving and comparing the xpub at the keypath.
-fn is_our_key(key: &pb::KeyOriginInfo, our_root_fingerprint: &[u8]) -> Result<bool, ()> {
+fn is_our_key(
+    hal: &mut impl crate::hal::Hal,
+    key: &pb::KeyOriginInfo,
+    our_root_fingerprint: &[u8],
+) -> Result<bool, ()> {
     match key {
         pb::KeyOriginInfo {
             root_fingerprint,
@@ -58,7 +62,7 @@ fn is_our_key(key: &pb::KeyOriginInfo, our_root_fingerprint: &[u8]) -> Result<bo
             xpub: Some(xpub),
             ..
         } if root_fingerprint.as_slice() == our_root_fingerprint => {
-            let our_xpub = crate::keystore::get_xpub_once(keypath)?.serialize(None)?;
+            let our_xpub = crate::keystore::get_xpub_once(hal, keypath)?.serialize(None)?;
             let maybe_our_xpub = bip32::Xpub::from(xpub).serialize(None)?;
             Ok(our_xpub == maybe_our_xpub)
         }
@@ -555,12 +559,13 @@ impl ParsedPolicy<'_> {
     /// path, and if the latter, which leaf exactly.
     pub fn taproot_spend_info(
         &self,
+        hal: &mut impl crate::hal::Hal,
         xpub_cache: &mut Bip32XpubCache,
         keypath: &[u32],
     ) -> Result<TaprootSpendInfo, Error> {
         match self.derive_at_keypath(keypath)? {
             Descriptor::Tr(tr) => {
-                let xpub = xpub_cache.get_xpub(keypath)?;
+                let xpub = xpub_cache.get_xpub(hal, keypath)?;
                 let is_keypath_spend =
                     xpub.public_key() == tr.inner.internal_key().inner.serialize();
 
@@ -657,7 +662,11 @@ impl ParsedPolicy<'_> {
 ///
 /// The parsed output keeps the key strings as is (e.g. "@0/**"). They will be processed and
 /// replaced with actual pubkeys in a later step.
-pub fn parse(policy: &Policy, coin: BtcCoin) -> Result<ParsedPolicy<'_>, Error> {
+pub fn parse<'a>(
+    hal: &mut impl crate::hal::Hal,
+    policy: &'a Policy,
+    coin: BtcCoin,
+) -> Result<ParsedPolicy<'a>, Error> {
     check_enabled(coin)?;
     if policy.keys.len() > MAX_KEYS {
         return Err(Error::InvalidInput);
@@ -666,11 +675,10 @@ pub fn parse(policy: &Policy, coin: BtcCoin) -> Result<ParsedPolicy<'_>, Error> 
     let desc = policy.policy.as_str();
     let our_root_fingerprint = crate::keystore::root_fingerprint()?;
 
-    let is_our_key: Vec<bool> = policy
-        .keys
-        .iter()
-        .map(|key| is_our_key(key, &our_root_fingerprint))
-        .collect::<Result<Vec<bool>, ()>>()?;
+    let mut our_key_flags = Vec::with_capacity(policy.keys.len());
+    for key in policy.keys.iter() {
+        our_key_flags.push(is_our_key(hal, key, &our_root_fingerprint)?);
+    }
 
     let parsed = match desc.as_bytes() {
         // Match wsh(...).
@@ -686,7 +694,7 @@ pub fn parse(policy: &Policy, coin: BtcCoin) -> Result<ParsedPolicy<'_>, Error> 
                 .map_err(|_| Error::InvalidInput)?;
             ParsedPolicy {
                 policy,
-                is_our_key,
+                is_our_key: our_key_flags,
                 descriptor: Descriptor::Wsh(Wsh { miniscript_expr }),
             }
         }
@@ -700,7 +708,7 @@ pub fn parse(policy: &Policy, coin: BtcCoin) -> Result<ParsedPolicy<'_>, Error> 
 
             ParsedPolicy {
                 policy,
-                is_our_key,
+                is_our_key: our_key_flags,
                 descriptor: Descriptor::Tr(Tr { inner: tr }),
             }
         }
@@ -769,6 +777,7 @@ mod tests {
     use super::*;
 
     use crate::bip32::parse_xpub;
+    use crate::hal::testing::TestingHal;
     use crate::keystore::testing::{mock_unlocked, mock_unlocked_using_mnemonic};
 
     const SOME_XPUB_1: &str = "tpubDFj9SBQssRHA5EB1ox58mcgF9sB61br9RGz6UrBukcNKmFe4fPgskZ4wigxQ1jSUzLdjnvvDHL8Z6L3ey5Ev5FNNqrDrePxwXsNHiLZhBTc";
@@ -787,7 +796,8 @@ mod tests {
 
     // Creates a policy for one of our own keys at keypath.
     fn make_our_key(keypath: &[u32]) -> pb::KeyOriginInfo {
-        let our_xpub = crate::keystore::get_xpub_once(keypath).unwrap();
+        let mut hal = crate::hal::testing::TestingHal::new();
+        let our_xpub = crate::keystore::get_xpub_once(&mut hal, keypath).unwrap();
         pb::KeyOriginInfo {
             root_fingerprint: crate::keystore::root_fingerprint().unwrap(),
             keypath: keypath.to_vec(),
@@ -866,7 +876,11 @@ mod tests {
                     make_our_key(KEYPATH_ACCOUNT),
                 ],
             );
-            let pks: Vec<String> = parse(&policy, BtcCoin::Tbtc).unwrap().iter_pk().collect();
+            let mut hal = TestingHal::new();
+            let pks: Vec<String> = parse(&mut hal, &policy, BtcCoin::Tbtc)
+                .unwrap()
+                .iter_pk()
+                .collect();
             assert_eq!(pks.as_slice(), test.expected_pks);
         }
     }
@@ -875,9 +889,10 @@ mod tests {
     fn test_parse_wsh_miniscript() {
         let coin = BtcCoin::Tbtc;
         let our_key = make_our_key(KEYPATH_ACCOUNT);
+        let mut hal = TestingHal::new();
         // Parse a valid example and check that the keys are collected as is as strings.
         let policy = make_policy("wsh(pk(@0/**))", core::slice::from_ref(&our_key));
-        match &parse(&policy, coin).unwrap().descriptor {
+        match &parse(&mut hal, &policy, coin).unwrap().descriptor {
             Descriptor::Wsh(Wsh {
                 miniscript_expr, ..
             }) => {
@@ -894,7 +909,8 @@ mod tests {
             "wsh(or_b(pk(@0/**),s:pk(@1/**)))",
             &[our_key.clone(), make_key(SOME_XPUB_1)],
         );
-        match &parse(&policy, coin).unwrap().descriptor {
+        let mut hal = TestingHal::new();
+        match &parse(&mut hal, &policy, coin).unwrap().descriptor {
             Descriptor::Wsh(Wsh {
                 miniscript_expr, ..
             }) => {
@@ -908,34 +924,36 @@ mod tests {
 
         // Unknown top-level fragment.
         assert_eq!(
-            parse(
-                &make_policy("unknown(pk(@0/**))", core::slice::from_ref(&our_key)),
-                coin
-            )
-            .unwrap_err(),
+            {
+                let mut hal = TestingHal::new();
+                let policy =
+                    make_policy("unknown(pk(@0/**))", core::slice::from_ref(&our_key));
+                parse(&mut hal, &policy, coin).unwrap_err()
+            },
             Error::InvalidInput,
         );
 
         // Unknown script fragment.
         assert_eq!(
-            parse(
-                &make_policy("wsh(unknown(@0/**))", core::slice::from_ref(&our_key)),
-                coin
-            )
-            .unwrap_err(),
+            {
+                let mut hal = TestingHal::new();
+                let policy =
+                    make_policy("wsh(unknown(@0/**))", core::slice::from_ref(&our_key));
+                parse(&mut hal, &policy, coin).unwrap_err()
+            },
             Error::InvalidInput,
         );
 
         // Miniscript type-check fails (should be `or_b(pk(@0/**),s:pk(@1/**))`).
         assert_eq!(
-            parse(
-                &make_policy(
+            {
+                let mut hal = TestingHal::new();
+                let policy = make_policy(
                     "wsh(or_b(pk(@0/**),pk(@1/**)))",
-                    &[our_key.clone(), make_key(SOME_XPUB_1)]
-                ),
-                coin
-            )
-            .unwrap_err(),
+                    &[our_key.clone(), make_key(SOME_XPUB_1)],
+                );
+                parse(&mut hal, &policy, coin).unwrap_err()
+            },
             Error::InvalidInput,
         );
     }
@@ -948,37 +966,48 @@ mod tests {
         let coin = BtcCoin::Tbtc;
 
         // All good.
-        assert!(
+        assert!({
+            let mut hal = TestingHal::new();
+            let policy = make_policy("wsh(pk(@0/**))", core::slice::from_ref(&our_key));
             parse(
-                &make_policy("wsh(pk(@0/**))", core::slice::from_ref(&our_key)),
+                &mut hal,
+                &policy,
                 coin
             )
             .is_ok()
-        );
+        });
 
         // All good, all keys are used across internal key & leaf scripts.
-        assert!(
+        assert!({
+            let mut hal = TestingHal::new();
+            let policy = make_policy(
+                "tr(@0/**,{pk(@1/**),pk(@2/**)})",
+                &[
+                    our_key.clone(),
+                    make_key(SOME_XPUB_1),
+                    make_key(SOME_XPUB_2)
+                ],
+            );
             parse(
-                &make_policy(
-                    "tr(@0/**,{pk(@1/**),pk(@2/**)})",
-                    &[
-                        our_key.clone(),
-                        make_key(SOME_XPUB_1),
-                        make_key(SOME_XPUB_2)
-                    ],
-                ),
+                &mut hal,
+                &policy,
                 coin
             )
             .is_ok()
-        );
+        });
 
         // Unsupported coins
         for coin in [BtcCoin::Ltc, BtcCoin::Tltc] {
+            let policy = make_policy("wsh(pk(@0/**))", core::slice::from_ref(&our_key));
             assert!(matches!(
-                parse(
-                    &make_policy("wsh(pk(@0/**))", core::slice::from_ref(&our_key)),
-                    coin
-                ),
+                {
+                    let mut hal = TestingHal::new();
+                    parse(
+                        &mut hal,
+                        &policy,
+                        coin,
+                    )
+                },
                 Err(Error::InvalidInput)
             ));
         }
@@ -987,78 +1016,92 @@ mod tests {
         let many_keys: Vec<pb::KeyOriginInfo> = (0..=20)
             .map(|i| make_our_key(&[48 + HARDENED, 1 + HARDENED, i + HARDENED, 3 + HARDENED]))
             .collect();
+        let policy = make_policy("wsh(pk(@0/**))", &many_keys);
         assert!(matches!(
-            parse(&make_policy("wsh(pk(@0/**))", &many_keys), coin),
+            {
+                let mut hal = TestingHal::new();
+                parse(&mut hal, &policy, coin)
+            },
             Err(Error::InvalidInput)
         ));
 
         // Our key is not present - fingerprint missing.
+        let policy = make_policy("wsh(pk(@0/**))", &[make_key(SOME_XPUB_1)]);
         assert!(matches!(
-            parse(
-                &make_policy("wsh(pk(@0/**))", &[make_key(SOME_XPUB_1)]),
-                coin
-            ),
+            {
+                let mut hal = TestingHal::new();
+                parse(&mut hal, &policy, coin)
+            },
             Err(Error::InvalidInput)
         ));
 
         // Our key is not present - fingerprint and keypath exist but xpub does not match.
         let mut wrong_key = our_key.clone();
         wrong_key.xpub = Some(parse_xpub(SOME_XPUB_1).unwrap());
+        let policy = make_policy("wsh(pk(@0/**))", &[wrong_key]);
         assert!(matches!(
-            parse(&make_policy("wsh(pk(@0/**))", &[wrong_key]), coin),
+            {
+                let mut hal = TestingHal::new();
+                parse(&mut hal, &policy, coin)
+            },
             Err(Error::InvalidInput)
         ));
 
         // Contains duplicate keys.
+        let policy = make_policy(
+            "wsh(multi(2,@0/**,@1/**,@2/**))",
+            &[
+                make_key(SOME_XPUB_1),
+                our_key.clone(),
+                make_key(SOME_XPUB_1)
+            ],
+        );
         assert!(matches!(
-            parse(
-                &make_policy(
-                    "wsh(multi(2,@0/**,@1/**,@2/**))",
-                    &[
-                        make_key(SOME_XPUB_1),
-                        our_key.clone(),
-                        make_key(SOME_XPUB_1)
-                    ]
-                ),
-                coin
-            ),
+            {
+                let mut hal = TestingHal::new();
+                parse(&mut hal, &policy, coin)
+            },
             Err(Error::InvalidInput)
         ));
 
         // Contains a key with missing xpub.
+        let policy = make_policy(
+            "wsh(multi(2,@0/**,@1/**))",
+            &[
+                our_key.clone(),
+                pb::KeyOriginInfo {
+                    root_fingerprint: vec![],
+                    keypath: vec![],
+                    xpub: None // missing
+                }
+            ],
+        );
         assert!(matches!(
-            parse(
-                &make_policy(
-                    "wsh(multi(2,@0/**,@1/**))",
-                    &[
-                        our_key.clone(),
-                        pb::KeyOriginInfo {
-                            root_fingerprint: vec![],
-                            keypath: vec![],
-                            xpub: None // missing
-                        }
-                    ]
-                ),
-                coin
-            ),
+            {
+                let mut hal = TestingHal::new();
+                parse(&mut hal, &policy, coin)
+            },
             Err(Error::InvalidInput)
         ));
 
         // Not all keys are used.
+        let policy =
+            make_policy("wsh(pk(@0/**))", &[our_key.clone(), make_key(SOME_XPUB_1)]);
         assert!(matches!(
-            parse(
-                &make_policy("wsh(pk(@0/**))", &[our_key.clone(), make_key(SOME_XPUB_1)]),
-                coin
-            ),
+            {
+                let mut hal = TestingHal::new();
+                parse(&mut hal, &policy, coin)
+            },
             Err(Error::InvalidInput)
         ));
 
         // Referenced key does not exist
+        let policy = make_policy("wsh(pk(@1/**))", core::slice::from_ref(&our_key));
         assert!(matches!(
-            parse(
-                &make_policy("wsh(pk(@1/**))", core::slice::from_ref(&our_key)),
-                coin
-            ),
+            {
+                let mut hal = TestingHal::new();
+                parse(&mut hal, &policy, coin)
+            },
             Err(Error::InvalidInput)
         ));
     }
@@ -1072,21 +1115,30 @@ mod tests {
 
         // Ok, one key.
         let pol = make_policy("wsh(pk(@0/**))", core::slice::from_ref(&our_key));
-        assert!(parse(&pol, coin).is_ok());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_ok()
+        });
 
         // Ok, two keys.
         let pol = make_policy(
             "wsh(or_b(pk(@0/**),s:pk(@1/**)))",
             &[our_key.clone(), make_key(SOME_XPUB_1)],
         );
-        assert!(parse(&pol, coin).is_ok());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_ok()
+        });
 
         // Ok, one key with different derivations
         let pol = make_policy(
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<2;3>/*)))",
             core::slice::from_ref(&our_key),
         );
-        assert!(parse(&pol, coin).is_ok());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_ok()
+        });
 
         // Duplicate path, one time in change, one time in receive. While the keys technically are
         // never duplicate in the final miniscript with the pubkeys inserted, we still prohibit it,
@@ -1096,39 +1148,57 @@ mod tests {
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<1;2>/*)))",
             core::slice::from_ref(&our_key),
         );
-        assert!(parse(&pol, coin).is_err());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_err()
+        });
 
         // Duplicate key inside policy.
         let pol = make_policy(
             "wsh(or_b(pk(@0/**),s:pk(@0/**)))",
             core::slice::from_ref(&our_key),
         );
-        assert!(parse(&pol, coin).is_err());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_err()
+        });
 
         // Duplicate key inside policy (same change and receive).
         let pol = make_policy("wsh(pk(@0/<0;0>/*))", core::slice::from_ref(&our_key));
-        assert!(parse(&pol, coin).is_err());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_err()
+        });
 
         // Duplicate key inside policy, using different notations for the same thing.
         let pol = make_policy(
             "wsh(or_b(pk(@0/**),s:pk(@0/<0;1>/*)))",
             core::slice::from_ref(&our_key),
         );
-        assert!(parse(&pol, coin).is_err());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_err()
+        });
 
         // Duplicate key inside policy, using same receive but different change.
         let pol = make_policy(
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<0;2>/*)))",
             core::slice::from_ref(&our_key),
         );
-        assert!(parse(&pol, coin).is_err());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_err()
+        });
 
         // Duplicate key inside policy, using same change but different receive.
         let pol = make_policy(
             "wsh(or_b(pk(@0/<0;1>/*),s:pk(@0/<2;1>/*)))",
             core::slice::from_ref(&our_key),
         );
-        assert!(parse(&pol, coin).is_err());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_err()
+        });
     }
 
     #[test]
@@ -1140,14 +1210,20 @@ mod tests {
 
         // Ok, only internal key.
         let pol = make_policy("tr(@0/**)", core::slice::from_ref(&our_key));
-        assert!(parse(&pol, coin).is_ok());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_ok()
+        });
 
         // Ok, one leaf with one key.
         let pol = make_policy(
             "tr(@0/**,pk(@1/**))",
             &[our_key.clone(), make_key(SOME_XPUB_1)],
         );
-        assert!(parse(&pol, coin).is_ok());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_ok()
+        });
 
         // Ok, one leaf with two keys.
         let pol = make_policy(
@@ -1158,26 +1234,38 @@ mod tests {
                 make_key(SOME_XPUB_2),
             ],
         );
-        assert!(parse(&pol, coin).is_ok());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_ok()
+        });
 
         // Duplicate keys across internal key and multiple leafs. Technically okay, but prohibited
         // by BIP-388.
         let pol = make_policy("tr(@0/**,pk(@0/**))", core::slice::from_ref(&our_key));
-        assert!(parse(&pol, coin).is_err());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_err()
+        });
 
         // Duplicate key in one leaf script.
         let pol = make_policy(
             "tr(@0/**,or_b(pk(@1/**),s:pk(@1/**)))",
             &[our_key.clone(), make_key(SOME_XPUB_1)],
         );
-        assert!(parse(&pol, coin).is_err());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_err()
+        });
 
         // Duplicate key inside one leaf script, using same receive but different change.
         let pol = make_policy(
             "tr(@0/**,or_b(pk(@1/<0;1>/*),s:pk(@1/<0;2>/*)))",
             &[our_key.clone(), make_key(SOME_XPUB_1)],
         );
-        assert!(parse(&pol, coin).is_err());
+        assert!({
+            let mut hal = TestingHal::new();
+            parse(&mut hal, &pol, coin).is_err()
+        });
     }
 
     #[test]
@@ -1338,7 +1426,9 @@ mod tests {
         let coin = BtcCoin::Tbtc;
 
         let witness_script = |pol: &str, keys: &[pb::KeyOriginInfo], is_change: bool| {
-            let derived = parse(&make_policy(pol, keys), coin)
+            let mut hal = TestingHal::new();
+            let policy = make_policy(pol, keys);
+            let derived = parse(&mut hal, &policy, coin)
                 .unwrap()
                 .derive(is_change, address_index)
                 .unwrap();
@@ -1348,7 +1438,9 @@ mod tests {
             }
         };
         let witness_script_at_keypath = |pol: &str, keys: &[pb::KeyOriginInfo], keypath: &[u32]| {
-            let derived = parse(&make_policy(pol, keys), coin)
+            let mut hal = TestingHal::new();
+            let policy = make_policy(pol, keys);
+            let derived = parse(&mut hal, &policy, coin)
                 .unwrap()
                 .derive_at_keypath(keypath)
                 .unwrap();
@@ -1469,13 +1561,18 @@ mod tests {
         let our_key = make_our_key(&[86 + HARDENED, HARDENED, HARDENED]);
 
         let (is_change, address_index) = (false, 0);
-        let derived = parse(
-            &make_policy("tr(@0/**)", core::slice::from_ref(&our_key)),
-            coin,
-        )
-        .unwrap()
-        .derive(is_change, address_index)
-        .unwrap();
+        let derived = {
+            let mut hal = TestingHal::new();
+            let policy = make_policy("tr(@0/**)", core::slice::from_ref(&our_key));
+            parse(
+                &mut hal,
+                &policy,
+                coin,
+            )
+            .unwrap()
+            .derive(is_change, address_index)
+            .unwrap()
+        };
         match derived {
             Descriptor::Tr(tr) => {
                 assert_eq!(
@@ -1499,7 +1596,9 @@ mod tests {
 
         let output_key =
             |pol: &str, keys: &[pb::KeyOriginInfo], is_change: bool, address_index: u32| {
-                let derived = parse(&make_policy(pol, keys), coin)
+                let mut hal = TestingHal::new();
+                let policy = make_policy(pol, keys);
+                let derived = parse(&mut hal, &policy, coin)
                     .unwrap()
                     .derive(is_change, address_index)
                     .unwrap();
@@ -1509,7 +1608,9 @@ mod tests {
                 }
             };
         let output_key_at_keypath = |pol: &str, keys: &[pb::KeyOriginInfo], keypath: &[u32]| {
-            let derived = parse(&make_policy(pol, keys), coin)
+            let mut hal = TestingHal::new();
+            let policy = make_policy(pol, keys);
+            let derived = parse(&mut hal, &policy, coin)
                 .unwrap()
                 .derive_at_keypath(keypath)
                 .unwrap();
@@ -1646,7 +1747,8 @@ mod tests {
         {
             let policy_str = "tr(@0/<0;1>/*,{and_v(v:multi_a(1,@1/<2;3>/*,@2/<2;3>/*),older(2)),multi_a(2,@1/<0;1>/*,@2/<0;1>/*)})";
             let policy = make_policy(policy_str, &[k0.clone(), k1.clone(), k2.clone()]);
-            let parsed_policy = parse(&policy, BtcCoin::Tbtc).unwrap();
+            let mut hal = TestingHal::new();
+            let parsed_policy = parse(&mut hal, &policy, BtcCoin::Tbtc).unwrap();
             assert_eq!(
                 parsed_policy.taproot_is_unspendable_internal_key(),
                 Ok(Some(0))
@@ -1660,7 +1762,8 @@ mod tests {
             let policy_str = "tr(@1/<0;1>/*,{and_v(v:multi_a(1,@0/<2;3>/*,@2/<2;3>/*),older(2)),multi_a(2,@0/<0;1>/*,@2/<0;1>/*)})";
 
             let policy = make_policy(policy_str, &[k1.clone(), k0.clone(), k2.clone()]);
-            let parsed_policy = parse(&policy, BtcCoin::Tbtc).unwrap();
+            let mut hal = TestingHal::new();
+            let parsed_policy = parse(&mut hal, &policy, BtcCoin::Tbtc).unwrap();
             assert_eq!(
                 parsed_policy.taproot_is_unspendable_internal_key(),
                 Ok(Some(1))

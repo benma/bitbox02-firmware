@@ -63,14 +63,14 @@ pub async fn process(
 
     let sighash: [u8; 32] = sha3::Keccak256::digest(&msg).into();
 
+    let private_key = keystore::secp256k1_get_private_key(hal, &request.keypath)?;
+    let private_key_bytes: [u8; 32] = private_key.as_slice().try_into().unwrap();
+
     let host_nonce = match request.host_nonce_commitment {
         // Engage in the anti-klepto protocol if the host sends a host nonce commitment.
         Some(pb::AntiKleptoHostNonceCommitment { ref commitment }) => {
             let signer_commitment = keystore::secp256k1_nonce_commit(
-                keystore::secp256k1_get_private_key(&request.keypath)?
-                    .as_slice()
-                    .try_into()
-                    .unwrap(),
+                &private_key_bytes,
                 &sighash,
                 commitment
                     .as_slice()
@@ -86,14 +86,7 @@ pub async fn process(
         None => [0; 32],
     };
 
-    let sign_result = keystore::secp256k1_sign(
-        keystore::secp256k1_get_private_key(&request.keypath)?
-            .as_slice()
-            .try_into()
-            .unwrap(),
-        &sighash,
-        &host_nonce,
-    )?;
+    let sign_result = keystore::secp256k1_sign(&private_key_bytes, &sighash, &host_nonce)?;
     let mut signature: Vec<u8> = sign_result.signature.to_vec();
     signature.push(sign_result.recid);
 

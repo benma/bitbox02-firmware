@@ -385,14 +385,14 @@ pub async fn _process(
         Transaction::Eip1559(eip1559) => hash_eip1559(eip1559)?,
     };
 
+    let private_key = keystore::secp256k1_get_private_key(hal, request.keypath())?;
+    let private_key_bytes: [u8; 32] = private_key.as_slice().try_into().unwrap();
+
     let host_nonce = match request.host_nonce_commitment() {
         // Engage in the anti-klepto protocol if the host sends a host nonce commitment.
         Some(pb::AntiKleptoHostNonceCommitment { commitment }) => {
             let signer_commitment = keystore::secp256k1_nonce_commit(
-                &keystore::secp256k1_get_private_key(request.keypath())?
-                    .as_slice()
-                    .try_into()
-                    .unwrap(),
+                &private_key_bytes,
                 &hash,
                 commitment
                     .as_slice()
@@ -407,14 +407,7 @@ pub async fn _process(
         // Return signature directly without the anti-klepto protocol, for backwards compatibility.
         None => [0; 32],
     };
-    let sign_result = keystore::secp256k1_sign(
-        &keystore::secp256k1_get_private_key(request.keypath())?
-            .as_slice()
-            .try_into()
-            .unwrap(),
-        &hash,
-        &host_nonce,
-    )?;
+    let sign_result = keystore::secp256k1_sign(&private_key_bytes, &hash, &host_nonce)?;
     let mut signature: Vec<u8> = sign_result.signature.to_vec();
     signature.push(sign_result.recid);
 

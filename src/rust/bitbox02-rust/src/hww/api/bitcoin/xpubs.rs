@@ -29,7 +29,10 @@ const MAX_XPUBS: usize = 20;
 /// Retrieves up to 20 xpubs at once.
 ///
 /// Only standard keypaths are allowed for now.
-pub async fn process_xpubs(request: &pb::BtcXpubsRequest) -> Result<Response, Error> {
+pub async fn process_xpubs(
+    hal: &mut impl crate::hal::Hal,
+    request: &pb::BtcXpubsRequest,
+) -> Result<Response, Error> {
     let coin = BtcCoin::try_from(request.coin)?;
     super::coin_enabled(coin)?;
 
@@ -56,7 +59,7 @@ pub async fn process_xpubs(request: &pb::BtcXpubsRequest) -> Result<Response, Er
             .map_err(|_| Error::InvalidInput)?;
     }
 
-    let xpubs = crate::keystore::get_xpubs_twice(&keypaths)?;
+    let xpubs = crate::keystore::get_xpubs_twice(hal, &keypaths)?;
     let xpub_strings: Vec<String> = xpubs
         .iter()
         .map(|xpub| xpub.serialize_str(xpub_type))
@@ -68,6 +71,7 @@ pub async fn process_xpubs(request: &pb::BtcXpubsRequest) -> Result<Response, Er
 mod tests {
     use super::*;
 
+    use crate::hal::testing::TestingHal;
     use crate::keystore::testing::{mock_unlocked, mock_unlocked_using_mnemonic};
     use bitbox02::testing::mock_memory;
     use util::bb02_async::block_on;
@@ -80,9 +84,10 @@ mod tests {
             "",
         );
 
-        bitbox02::securechip::fake_event_counter_reset();
+        let mut hal = TestingHal::new();
+        hal.securechip.event_counter_reset();
         assert_eq!(
-            block_on(process_xpubs(&pb::BtcXpubsRequest {
+            block_on(process_xpubs(&mut hal, &pb::BtcXpubsRequest {
                 coin: BtcCoin::Btc as _,
                 xpub_type: XPubType::Xpub as _,
                 keypaths: vec![
@@ -105,11 +110,12 @@ mod tests {
                 ]
             })),
         );
-        assert_eq!(bitbox02::securechip::fake_event_counter(), 2);
+        assert_eq!(hal.securechip.get_event_counter(), 2);
 
         // Different output type
+        let mut hal = TestingHal::new();
         assert_eq!(
-            block_on(process_xpubs(&pb::BtcXpubsRequest {
+            block_on(process_xpubs(&mut hal, &pb::BtcXpubsRequest {
                 coin: BtcCoin::Btc as _,
                 xpub_type: XPubType::Tpub as _,
                 keypaths: vec![
@@ -126,8 +132,9 @@ mod tests {
         );
 
         // Different coin
+        let mut hal = TestingHal::new();
         assert_eq!(
-            block_on(process_xpubs(&pb::BtcXpubsRequest {
+            block_on(process_xpubs(&mut hal, &pb::BtcXpubsRequest {
                 coin: BtcCoin::Ltc as _,
                 xpub_type: XPubType::Xpub as _,
                 keypaths: vec![
@@ -150,7 +157,8 @@ mod tests {
         mock_unlocked();
 
         // At limit
-        let result = block_on(process_xpubs(&pb::BtcXpubsRequest {
+        let mut hal = TestingHal::new();
+        let result = block_on(process_xpubs(&mut hal, &pb::BtcXpubsRequest {
             coin: BtcCoin::Btc as _,
             xpub_type: XPubType::Xpub as _,
             keypaths: (0..20)
@@ -166,8 +174,9 @@ mod tests {
         };
 
         // Over limit
+        let mut hal = TestingHal::new();
         assert_eq!(
-            block_on(process_xpubs(&pb::BtcXpubsRequest {
+            block_on(process_xpubs(&mut hal, &pb::BtcXpubsRequest {
                 coin: BtcCoin::Btc as _,
                 xpub_type: XPubType::Xpub as _,
                 keypaths: (0..21)
@@ -183,8 +192,9 @@ mod tests {
     #[test]
     pub fn test_process_invalid_keypath() {
         mock_unlocked();
+        let mut hal = TestingHal::new();
         assert_eq!(
-            block_on(process_xpubs(&pb::BtcXpubsRequest {
+            block_on(process_xpubs(&mut hal, &pb::BtcXpubsRequest {
                 coin: BtcCoin::Ltc as _,
                 xpub_type: XPubType::Xpub as _,
                 keypaths: vec![pb::Keypath {
