@@ -117,7 +117,7 @@ impl RetainedEncryptedBuffer {
             &format!("{}_in", purpose),
             &format!("{}_out", purpose),
         )?;
-        let iv_rand = random.random_32_bytes();
+        let iv_rand = hal.random().random_32_bytes();
         let iv: &[u8; 16] = iv_rand.first_chunk::<16>().unwrap();
         let encrypted = bitbox_aes::encrypt_with_hmac(iv, &encryption_key, data);
         Ok(RetainedEncryptedBuffer {
