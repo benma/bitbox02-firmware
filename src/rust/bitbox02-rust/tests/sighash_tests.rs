@@ -5,8 +5,8 @@ use std::cell::RefCell;
 use serde::Deserialize;
 
 use bitbox02_rust::hww::api::ethereum::sighash::{
-    compute_eip1559, compute_legacy, tests::clear_chunk_responder, tests::setup_chunk_responder,
-    ChunkingProducer, ParamsEIP1559, ParamsLegacy, SimpleProducer,
+    ChunkingProducer, ParamsEIP1559, ParamsLegacy, SimpleProducer, compute_eip1559, compute_legacy,
+    tests::clear_chunk_responder, tests::setup_chunk_responder,
 };
 use util::bb02_async::block_on;
 
