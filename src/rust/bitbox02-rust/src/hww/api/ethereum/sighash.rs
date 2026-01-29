@@ -350,10 +350,6 @@ pub mod tests {
         *crate::hww::MOCK_NEXT_REQUEST.0.borrow_mut() = None;
     }
 
-    pub fn decode_hex(s: &str) -> Vec<u8> {
-        hex::decode(s).unwrap()
-    }
-
     #[test]
     fn test_simple_producer_empty() {
         let mut producer = SimpleProducer::new(&[]);
