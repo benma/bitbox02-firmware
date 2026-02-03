@@ -10,6 +10,12 @@ pub fn set_product(product: &str, queue: &mut RingBuffer) {
     }
 }
 
+/// Set the device name of the BLE chip. The name must contain no null bytes.
+pub fn set_name(name: &str, queue: &mut RingBuffer) {
+    let c_name = util::strings::str_to_cstr_vec(name).unwrap();
+    unsafe { bitbox02_sys::da14531_set_name(c_name.as_ptr(), &mut queue.inner) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -19,6 +25,7 @@ mod tests {
     use alloc::vec::Vec;
     use bitbox_framed_serial_link::{ProtocolPacketType, protocol_format};
 
+    const CTRL_CMD_DEVICE_NAME: u8 = 1;
     const CTRL_CMD_PRODUCT_STRING: u8 = 7;
 
     fn drain(queue: &mut RingBuffer) -> Vec<u8> {
@@ -41,6 +48,24 @@ mod tests {
 
         let mut payload = vec![CTRL_CMD_PRODUCT_STRING];
         payload.extend_from_slice(product.as_bytes());
+        let mut expected = vec![0u8; 140];
+        let expected_len = protocol_format(&mut expected, ProtocolPacketType::CtrlData, &payload);
+        expected.truncate(expected_len);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_set_name() {
+        let name = "foo bar";
+        let mut buf = [0u8; 256];
+        let mut queue = RingBuffer::new(&mut buf);
+
+        set_name(name, &mut queue);
+
+        let actual = drain(&mut queue);
+
+        let mut payload = vec![CTRL_CMD_DEVICE_NAME];
+        payload.extend_from_slice(name.as_bytes());
         let mut expected = vec![0u8; 140];
         let expected_len = protocol_format(&mut expected, ProtocolPacketType::CtrlData, &payload);
         expected.truncate(expected_len);

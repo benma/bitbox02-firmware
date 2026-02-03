@@ -65,6 +65,7 @@ const ALLOWLIST_FNS: &[&str] = &[
     "delay_ms",
     "delay_us",
     "da14531_set_product",
+    "da14531_set_name",
     "emit_event",
     "empty_create",
     "fake_memory_factoryreset",
