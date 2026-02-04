@@ -7,5 +7,9 @@
 #![allow(non_snake_case)]
 // Can be removed once https://github.com/rust-lang/rust-bindgen/issues/1651 is resolved.
 #![allow(deref_nullptr)]
+// See https://github.com/rust-lang/rust-bindgen/issues/3147
+#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(clippy::missing_safety_doc)]
+
 // include our generated bindings
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
