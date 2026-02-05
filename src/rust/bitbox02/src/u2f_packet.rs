@@ -16,6 +16,6 @@ pub fn timeout(cid: u32) {
     unsafe { bitbox02_sys::u2f_packet_timeout(cid) }
 }
 
-pub fn process(packet: &[u8; 64]) -> bool {
-    unsafe { bitbox02_sys::u2f_packet_process(packet.as_ptr() as *const _) }
+pub fn process_frame(frame: &USB_FRAME) -> bool {
+    unsafe { bitbox02_sys::u2f_packet_process(frame as *const _) }
 }
