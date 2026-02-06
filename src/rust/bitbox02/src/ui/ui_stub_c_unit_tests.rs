@@ -95,21 +95,12 @@ pub async fn confirm_transaction_address_create(_amount: &str, _address: &str) -
     true
 }
 
-pub fn confirm_transaction_fee_create<'a, 'b>(
-    _amount: &'a str,
-    _fee: &'a str,
-    _longtouch: bool,
-    mut callback: AcceptRejectCb<'b>,
-) -> Component<'b> {
+pub async fn confirm_transaction_fee_create(_amount: &str, _fee: &str, _longtouch: bool) -> bool {
     crate::print_stdout(&format!(
         "CONFIRM TRANSACTION FEE SCREEN START\nAMOUNT: {}\nFEE: {}\nCONFIRM TRANSACTION FEE SCREEN END\n",
         _amount, _fee
     ));
-    callback(true);
-    Component {
-        is_pushed: false,
-        _p: PhantomData,
-    }
+    true
 }
 
 pub fn trinary_input_string_set_input(_component: &mut Component, _word: &str) {

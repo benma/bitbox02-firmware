@@ -77,12 +77,7 @@ pub async fn confirm_transaction_address_create(_amount: &str, _address: &str) -
     panic!("not used");
 }
 
-pub fn confirm_transaction_fee_create<'a, 'b>(
-    _amount: &'a str,
-    _fee: &'a str,
-    _longtouch: bool,
-    _callback: AcceptRejectCb<'b>,
-) -> Component<'b> {
+pub async fn confirm_transaction_fee_create(_amount: &str, _fee: &str, _longtouch: bool) -> bool {
     panic!("not used");
 }
 
