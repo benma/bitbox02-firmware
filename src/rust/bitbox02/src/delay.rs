@@ -1,21 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use alloc::sync::Arc;
-use core::task::{Poll, Waker};
 use core::time::Duration;
 
+// Active in C simulator and Rust unit tests.
+#[cfg(any(feature = "c-unit-testing", feature = "testing"))]
+pub async fn delay_for(_duration: Duration) {
+    // Do not delay in (non-graphical) simulator and Rust unit tests.
+}
+
+// Active in production firmware.
 #[cfg(not(any(
     feature = "testing",
     feature = "c-unit-testing",
     feature = "simulator-graphical"
 )))]
 pub async fn delay_for(duration: Duration) {
+    use alloc::sync::Arc;
     use core::cell::RefCell;
     use core::ffi::c_void;
-    // Shared between the async context and the c callback
+    use core::task::{Poll, Waker};
 
     let mut bitbox02_delay = bitbox02_sys::delay_t { id: 0 };
 
+    // Shared between the async context and the c callback
     struct SharedState {
         waker: Option<Waker>,
         result: Option<()>,
@@ -58,13 +65,13 @@ pub async fn delay_for(duration: Duration) {
     .await
 }
 
-#[cfg(any(
-    feature = "testing",
-    feature = "c-unit-testing",
-    feature = "simulator-graphical"
-))]
+// Active in the graphical simulators.
+#[cfg(all(feature = "simulator-graphical", not(feature = "testing")))]
 pub async fn delay_for(duration: Duration) {
+    use alloc::sync::Arc;
+    use core::task::{Poll, Waker};
     use std::sync::Mutex;
+
     // Shared between the async context and the c callback
     struct SharedState {
         waker: Option<Waker>,
