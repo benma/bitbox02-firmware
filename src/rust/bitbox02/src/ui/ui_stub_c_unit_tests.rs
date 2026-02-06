@@ -74,7 +74,7 @@ pub async fn sdcard() -> bool {
     true
 }
 
-pub fn menu_create(_params: MenuParams<'_>) -> Component<'_> {
+pub async fn menu_create(_params: MenuParams<'_>) -> Result<u8, ()> {
     panic!("not implemented");
 }
 
