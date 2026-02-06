@@ -87,20 +87,12 @@ pub async fn trinary_choice(
     panic!("not implemented")
 }
 
-pub fn confirm_transaction_address_create<'a, 'b>(
-    _amount: &'a str,
-    _address: &'a str,
-    mut callback: AcceptRejectCb<'b>,
-) -> Component<'b> {
+pub async fn confirm_transaction_address_create(_amount: &str, _address: &str) -> bool {
     crate::print_stdout(&format!(
         "CONFIRM TRANSACTION ADDRESS SCREEN START\nAMOUNT: {}\nADDRESS: {}\nCONFIRM TRANSACTION ADDRESS SCREEN END\n",
         _amount, _address
     ));
-    callback(true);
-    Component {
-        is_pushed: false,
-        _p: PhantomData,
-    }
+    true
 }
 
 pub fn confirm_transaction_fee_create<'a, 'b>(

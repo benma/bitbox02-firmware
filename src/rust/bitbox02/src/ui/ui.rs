@@ -517,34 +517,60 @@ pub async fn trinary_choice(
     .await
 }
 
-pub fn confirm_transaction_address_create<'a, 'b>(
-    amount: &'a str,
-    address: &'a str,
-    callback: AcceptRejectCb<'b>,
-) -> Component<'b> {
-    unsafe extern "C" fn c_callback(result: bool, user_data: *mut c_void) {
-        let callback = user_data as *mut AcceptRejectCb;
-        unsafe { (*callback)(result) };
+pub async fn confirm_transaction_address_create(amount: &str, address: &str) -> bool {
+    let _no_screensaver = crate::screen_saver::ScreensaverInhibitor::new();
+
+    // Shared between the async context and the c callback
+    struct SharedState {
+        waker: Option<Waker>,
+        result: Option<bool>,
+    }
+    let shared_state = Rc::new(RefCell::new(SharedState {
+        waker: None,
+        result: None,
+    }));
+
+    unsafe extern "C" fn callback(result: bool, user_data: *mut c_void) {
+        let shared_state: Rc<RefCell<SharedState>> = unsafe { Rc::from_raw(user_data as *mut _) };
+        let mut shared_state = shared_state.borrow_mut();
+        shared_state.result = Some(result);
+        if let Some(waker) = shared_state.waker.as_ref() {
+            waker.wake_by_ref();
+        }
     }
 
-    let user_data = Box::into_raw(Box::new(callback)) as *mut c_void;
     let component = unsafe {
         bitbox02_sys::confirm_transaction_address_create(
             util::strings::str_to_cstr_vec(amount).unwrap().as_ptr(), // copied in C
             util::strings::str_to_cstr_vec(address).unwrap().as_ptr(), // copied in C
-            Some(c_callback as _),
-            user_data,
+            Some(callback),
+            Rc::into_raw(Rc::clone(&shared_state)) as *mut _, // passed to callback as `user_data`.
         )
     };
-    Component {
+
+    let mut component = Component {
         component,
         is_pushed: false,
-        on_drop: Some(Box::new(move || unsafe {
-            // Drop all callbacks.
-            drop(Box::from_raw(user_data as *mut AcceptRejectCb));
-        })),
+        on_drop: None,
         _p: PhantomData,
-    }
+    };
+    component.screen_stack_push();
+
+    core::future::poll_fn({
+        let shared_state = Rc::clone(&shared_state);
+        move |cx| {
+            let mut shared_state = shared_state.borrow_mut();
+
+            if let Some(result) = shared_state.result {
+                Poll::Ready(result)
+            } else {
+                // Store the waker so the callback can wake up this task
+                shared_state.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    })
+    .await
 }
 
 pub fn confirm_transaction_fee_create<'a, 'b>(

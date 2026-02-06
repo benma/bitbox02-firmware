@@ -73,11 +73,7 @@ pub async fn trinary_choice(
     panic!("not used")
 }
 
-pub fn confirm_transaction_address_create<'a, 'b>(
-    _amount: &'a str,
-    _address: &'a str,
-    _callback: AcceptRejectCb<'b>,
-) -> Component<'b> {
+pub async fn confirm_transaction_address_create(_amount: &str, _address: &str) -> bool {
     panic!("not used");
 }
 
