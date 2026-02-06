@@ -7,18 +7,15 @@ pub use super::types::{
     TrinaryChoiceCb, TrinaryInputStringParams,
 };
 
-use core::marker::PhantomData;
-
 extern crate alloc;
 
 use alloc::string::String;
 
-pub struct Component<'a> {
+pub struct Component {
     is_pushed: bool,
-    _p: PhantomData<&'a ()>,
 }
 
-impl<'a> Component<'a> {
+impl Component {
     pub fn screen_stack_push(&mut self) {
         if self.is_pushed {
             panic!("component pushed twice");
@@ -27,7 +24,7 @@ impl<'a> Component<'a> {
     }
 }
 
-impl<'a> Drop for Component<'a> {
+impl Drop for Component {
     fn drop(&mut self) {
         if !self.is_pushed {
             panic!("component not pushed");
@@ -59,15 +56,12 @@ pub async fn confirm(params: &ConfirmParams<'_>) -> bool {
 
 pub fn screen_process() {}
 
-pub fn status_create<'a>(text: &str, _status_success: bool) -> Component<'a> {
+pub fn status_create(text: &str, _status_success: bool) -> Component {
     crate::print_stdout(&format!(
         "STATUS SCREEN START\nTITLE: {}\nSTATUS SCREEN END\n",
         text,
     ));
-    Component {
-        is_pushed: false,
-        _p: PhantomData,
-    }
+    Component { is_pushed: false }
 }
 
 pub async fn sdcard() -> bool {
@@ -109,20 +103,14 @@ pub fn trinary_input_string_set_input(_component: &mut Component, _word: &str) {
 
 pub fn screen_stack_pop_all() {}
 
-pub fn progress_create<'a>(_title: &str) -> Component<'a> {
-    Component {
-        is_pushed: false,
-        _p: PhantomData,
-    }
+pub fn progress_create(_title: &str) -> Component {
+    Component { is_pushed: false }
 }
 
 pub fn progress_set(_component: &mut Component, _progress: f32) {}
 
-pub fn empty_create<'a>() -> Component<'a> {
-    Component {
-        is_pushed: false,
-        _p: PhantomData,
-    }
+pub fn empty_create() -> Component {
+    Component { is_pushed: false }
 }
 
 pub async fn unlock_animation() {}
