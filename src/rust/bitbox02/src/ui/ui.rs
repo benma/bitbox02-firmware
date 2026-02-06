@@ -8,7 +8,6 @@ pub use super::types::{
 use core::ffi::{c_char, c_void};
 
 extern crate alloc;
-use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -659,31 +658,57 @@ pub fn empty_create<'a>() -> Component<'a> {
     }
 }
 
-pub fn unlock_animation_create<'a, F>(on_done: F) -> Component<'a>
-where
-    // Callback must outlive component.
-    F: FnMut() + 'a,
-{
-    unsafe extern "C" fn c_on_done<F2>(param: *mut c_void)
-    where
-        F2: FnMut(),
-    {
-        // The callback is dropped afterwards. This is safe because
-        // this C callback is guaranteed to be called only once.
-        let mut on_done = unsafe { Box::from_raw(param as *mut F2) };
-        on_done();
+pub async fn unlock_animation() {
+    let _no_screensaver = crate::screen_saver::ScreensaverInhibitor::new();
+
+    // Shared between the async context and the c callback
+    struct SharedState {
+        waker: Option<Waker>,
+        result: Option<()>,
     }
+    let shared_state = Rc::new(RefCell::new(SharedState {
+        waker: None,
+        result: None,
+    }));
+
+    unsafe extern "C" fn callback(user_data: *mut c_void) {
+        let shared_state: Rc<RefCell<SharedState>> = unsafe { Rc::from_raw(user_data as *mut _) };
+        let mut shared_state = shared_state.borrow_mut();
+        shared_state.result = Some(());
+        if let Some(waker) = shared_state.waker.as_ref() {
+            waker.wake_by_ref();
+        }
+    }
+
     let component = unsafe {
         bitbox02_sys::unlock_animation_create(
-            Some(c_on_done::<F>),
-            Box::into_raw(Box::new(on_done)) as *mut _, // passed to c_on_done as `param`.
+            Some(callback),
+            Rc::into_raw(Rc::clone(&shared_state)) as *mut _, // passed to callback as `user_data`.
         )
     };
-    Component {
+
+    let mut component = Component {
         component,
         is_pushed: false,
         _p: PhantomData,
-    }
+    };
+    component.screen_stack_push();
+
+    core::future::poll_fn({
+        let shared_state = Rc::clone(&shared_state);
+        move |cx| {
+            let mut shared_state = shared_state.borrow_mut();
+
+            if shared_state.result.is_some() {
+                Poll::Ready(())
+            } else {
+                // Store the waker so the callback can wake up this task
+                shared_state.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    })
+    .await
 }
 
 pub async fn choose_orientation() -> bool {
