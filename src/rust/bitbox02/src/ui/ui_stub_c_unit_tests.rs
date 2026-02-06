@@ -70,15 +70,8 @@ pub fn status_create<'a>(text: &str, _status_success: bool) -> Component<'a> {
     }
 }
 
-pub fn sdcard_create<'a, F>(mut callback: F) -> Component<'a>
-where
-    F: FnMut(bool) + 'a,
-{
-    callback(true);
-    Component {
-        is_pushed: false,
-        _p: PhantomData,
-    }
+pub async fn sdcard() -> bool {
+    true
 }
 
 pub fn menu_create(_params: MenuParams<'_>) -> Component<'_> {

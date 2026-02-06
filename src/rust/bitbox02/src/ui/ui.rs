@@ -264,34 +264,58 @@ pub fn status_create<'a>(text: &str, status_success: bool) -> Component<'a> {
     }
 }
 
-pub fn sdcard_create<'a, F>(callback: F) -> Component<'a>
-where
-    // Callback must outlive component.
-    F: FnMut(bool) + 'a,
-{
-    unsafe extern "C" fn c_callback<F2>(sd_done: bool, user_data: *mut c_void)
-    where
-        F2: FnMut(bool),
-    {
-        // The callback is dropped afterwards. This is safe because
-        // this C callback is guaranteed to be called only once.
-        let mut callback = unsafe { Box::from_raw(user_data as *mut F2) };
-        callback(sd_done);
+pub async fn sdcard() -> bool {
+    let _no_screensaver = crate::screen_saver::ScreensaverInhibitor::new();
+
+    // Shared between the async context and the c callback
+    struct SharedState {
+        waker: Option<Waker>,
+        result: Option<bool>,
+    }
+    let shared_state = Rc::new(RefCell::new(SharedState {
+        waker: None,
+        result: None,
+    }));
+
+    unsafe extern "C" fn callback(result: bool, user_data: *mut c_void) {
+        let shared_state: Rc<RefCell<SharedState>> = unsafe { Rc::from_raw(user_data as *mut _) };
+        let mut shared_state = shared_state.borrow_mut();
+        shared_state.result = Some(result);
+        if let Some(waker) = shared_state.waker.as_ref() {
+            waker.wake_by_ref();
+        }
     }
 
     let component = unsafe {
         bitbox02_sys::sdcard_create(
-            Some(c_callback::<F>),
-            // passed to the C callback as `user_data`
-            Box::into_raw(Box::new(callback)) as *mut _,
+            Some(callback),
+            Rc::into_raw(Rc::clone(&shared_state)) as *mut _, // passed to callback as `user_data`.
         )
     };
-    Component {
+
+    let mut component = Component {
         component,
         is_pushed: false,
         on_drop: None,
         _p: PhantomData,
-    }
+    };
+    component.screen_stack_push();
+
+    core::future::poll_fn({
+        let shared_state = Rc::clone(&shared_state);
+        move |cx| {
+            let mut shared_state = shared_state.borrow_mut();
+
+            if let Some(result) = shared_state.result {
+                Poll::Ready(result)
+            } else {
+                // Store the waker so the callback can wake up this task
+                shared_state.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    })
+    .await
 }
 
 pub fn menu_create(params: MenuParams<'_>) -> Component<'_> {

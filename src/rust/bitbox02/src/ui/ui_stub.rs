@@ -56,10 +56,7 @@ pub fn status_create<'a>(_text: &str, _status_success: bool) -> Component<'a> {
     panic!("not used");
 }
 
-pub fn sdcard_create<'a, F>(_callback: F) -> Component<'a>
-where
-    F: FnMut(bool) + 'a,
-{
+pub async fn sdcard() -> bool {
     panic!("not used");
 }
 
