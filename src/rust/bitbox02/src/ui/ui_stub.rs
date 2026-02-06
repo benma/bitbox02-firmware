@@ -38,14 +38,11 @@ impl Drop for Component<'_> {
     }
 }
 
-pub fn trinary_input_string_create<'a, F>(
-    _params: &TrinaryInputStringParams,
-    _confirm_callback: F,
-    _cancel_callback: Option<ContinueCancelCb<'a>>,
-) -> Component<'a>
-where
-    F: FnMut(zeroize::Zeroizing<String>) + 'a,
-{
+pub async fn trinary_input_string(
+    _params: &TrinaryInputStringParams<'_>,
+    _can_cancel: bool,
+    _preset: &str,
+) -> Result<zeroize::Zeroizing<String>, ()> {
     panic!("not used");
 }
 

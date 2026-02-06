@@ -52,66 +52,97 @@ impl Drop for Component<'_> {
     }
 }
 
-/// Creates a trinary input component.
-/// `result` - will be asynchronously set to `Some(<password>)` once the user confirms.
-pub fn trinary_input_string_create<'a, F>(
-    params: &TrinaryInputStringParams,
-    confirm_callback: F,
-    cancel_callback: Option<ContinueCancelCb<'a>>,
-) -> Component<'a>
-where
-    // Callback must outlive component.
-    F: FnMut(zeroize::Zeroizing<String>) + 'a,
-{
-    unsafe extern "C" fn c_confirm_callback<F2>(password: *const c_char, user_data: *mut c_void)
-    where
-        F2: FnMut(zeroize::Zeroizing<String>),
-    {
+pub async fn trinary_input_string<'a>(
+    params: &TrinaryInputStringParams<'a>,
+    can_cancel: bool,
+    preset: &str,
+) -> Result<zeroize::Zeroizing<String>, ()> {
+    let _no_screensaver = crate::screen_saver::ScreensaverInhibitor::new();
+
+    // Shared between the async context and the c callback
+    struct SharedState {
+        waker: Option<Waker>,
+        result: Option<Result<zeroize::Zeroizing<String>, ()>>,
+    }
+    let shared_state = Rc::new(RefCell::new(SharedState {
+        waker: None,
+        result: None,
+    }));
+
+    unsafe extern "C" fn cancel_cb(user_data: *mut c_void) {
+        let shared_state: Rc<RefCell<SharedState>> = unsafe { Rc::from_raw(user_data as *mut _) };
+        let mut shared_state = shared_state.borrow_mut();
+        shared_state.result = Some(Err(()));
+        if let Some(waker) = shared_state.waker.as_ref() {
+            waker.wake_by_ref();
+        }
+    }
+
+    unsafe extern "C" fn confirm_cb(password: *const c_char, user_data: *mut c_void) {
+        let shared_state: Rc<RefCell<SharedState>> = unsafe { Rc::from_raw(user_data as *mut _) };
+        let mut shared_state = shared_state.borrow_mut();
         let pw: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(
             unsafe { util::strings::str_from_null_terminated_ptr(password) }
                 .unwrap()
                 .into(),
         );
-        // The callback is dropped afterwards. This is safe because
-        // this C callback is guaranteed to be called only once.
-        let mut callback = unsafe { Box::from_raw(user_data as *mut F2) };
-        callback(pw);
+        shared_state.result = Some(Ok(pw));
+        if let Some(waker) = shared_state.waker.as_ref() {
+            waker.wake_by_ref();
+        }
     }
 
-    unsafe extern "C" fn c_cancel_callback(user_data: *mut c_void) {
-        let callback = user_data as *mut ContinueCancelCb;
-        unsafe { (*callback)() };
-    }
-
-    let (cancel_cb, cancel_user_data) = match cancel_callback {
-        None => (None, core::ptr::null_mut()),
-        Some(cb) => (
-            Some(c_cancel_callback as _),
-            Box::into_raw(Box::new(cb)) as *mut c_void,
-        ),
+    let (actual_cancel_cb, cancel_shared_state) = if can_cancel {
+        (
+            Some(cancel_cb as unsafe extern "C" fn(*mut c_void)),
+            Rc::into_raw(Rc::clone(&shared_state)) as *mut _,
+        )
+    } else {
+        (None, core::ptr::null_mut())
     };
+
     let mut title_scratch = Vec::new();
     let component = unsafe {
         bitbox02_sys::trinary_input_string_create(
             &params.to_c_params(&mut title_scratch).data, // title copied in C
-            Some(c_confirm_callback::<F>),
-            // passed to c_confirm_callback as `user_data`.
-            Box::into_raw(Box::new(confirm_callback)) as *mut _,
-            cancel_cb,
-            cancel_user_data,
+            Some(confirm_cb),
+            Rc::into_raw(Rc::clone(&shared_state)) as *mut _, // passed to confirm_cb as `user_data`.
+            actual_cancel_cb,
+            cancel_shared_state, // passed to cancel_cb as `user_data`.
         )
     };
-    Component {
+    if !preset.is_empty() {
+        unsafe {
+            bitbox02_sys::trinary_input_string_set_input(
+                component,
+                util::strings::str_to_cstr_vec(preset).unwrap().as_ptr(),
+            )
+        }
+    }
+
+    let mut component = Component {
         component,
         is_pushed: false,
-        on_drop: Some(Box::new(move || unsafe {
-            // Drop all callbacks.
-            if !cancel_user_data.is_null() {
-                drop(Box::from_raw(cancel_user_data as *mut ContinueCancelCb));
-            }
-        })),
+        on_drop: None,
         _p: PhantomData,
-    }
+    };
+    component.screen_stack_push();
+
+    core::future::poll_fn({
+        let shared_state = Rc::clone(&shared_state);
+        move |cx| {
+            let mut shared_state = shared_state.borrow_mut();
+
+            if let Some(result) = shared_state.result.take() {
+                Poll::Ready(result)
+            } else {
+                // Store the waker so the callback can wake up this task
+                shared_state.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    })
+    .await
 }
 
 /// Returns true if the user accepts, false if the user rejects.
