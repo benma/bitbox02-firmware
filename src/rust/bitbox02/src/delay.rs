@@ -69,7 +69,6 @@ pub async fn delay_for(duration: Duration) {
     struct SharedState {
         waker: Option<Waker>,
         result: Option<()>,
-        handle: Option<std::thread::JoinHandle<()>>,
     }
 
     if duration == Duration::ZERO {
@@ -79,10 +78,9 @@ pub async fn delay_for(duration: Duration) {
     let shared_state = Arc::new(Mutex::new(SharedState {
         waker: None,
         result: None,
-        handle: None,
     }));
 
-    let handle = std::thread::spawn({
+    let mut handle: Option<std::thread::JoinHandle<()>> = Some(std::thread::spawn({
         let shared_state = Arc::clone(&shared_state);
         move || {
             std::thread::sleep(duration);
@@ -92,9 +90,7 @@ pub async fn delay_for(duration: Duration) {
                 waker.wake_by_ref()
             }
         }
-    });
-
-    shared_state.lock().unwrap().handle = Some(handle);
+    }));
 
     core::future::poll_fn({
         let shared_state = Arc::clone(&shared_state);
@@ -102,7 +98,7 @@ pub async fn delay_for(duration: Duration) {
             let mut shared_state = shared_state.lock().unwrap();
 
             if let Some(result) = shared_state.result {
-                if let Some(handle) = shared_state.handle.take() {
+                if let Some(handle) = handle.take() {
                     handle.join().unwrap();
                 }
                 Poll::Ready(result)
