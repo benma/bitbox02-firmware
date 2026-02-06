@@ -9,8 +9,8 @@ use core::ffi::{c_char, c_void};
 
 extern crate alloc;
 use alloc::boxed::Box;
+use alloc::rc::Rc;
 use alloc::string::String;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::task::{Poll, Waker};
@@ -478,13 +478,13 @@ pub async fn choose_orientation() -> bool {
         waker: Option<Waker>,
         result: Option<bool>,
     }
-    let shared_state = Arc::new(RefCell::new(SharedState {
+    let shared_state = Rc::new(RefCell::new(SharedState {
         waker: None,
         result: None,
     }));
 
     unsafe extern "C" fn callback(upside_down: bool, user_data: *mut c_void) {
-        let shared_state: Arc<RefCell<SharedState>> = unsafe { Arc::from_raw(user_data as *mut _) };
+        let shared_state: Rc<RefCell<SharedState>> = unsafe { Rc::from_raw(user_data as *mut _) };
         let mut shared_state = shared_state.borrow_mut();
         shared_state.result = Some(upside_down);
         if let Some(waker) = shared_state.waker.as_ref() {
@@ -495,7 +495,7 @@ pub async fn choose_orientation() -> bool {
     let component = unsafe {
         bitbox02_sys::orientation_arrows_create(
             Some(callback),
-            Arc::into_raw(Arc::clone(&shared_state)) as *mut _, // passed to callback as `user_data`.
+            Rc::into_raw(Rc::clone(&shared_state)) as *mut _, // passed to callback as `user_data`.
         )
     };
 
@@ -508,7 +508,7 @@ pub async fn choose_orientation() -> bool {
     component.screen_stack_push();
 
     core::future::poll_fn({
-        let shared_state = Arc::clone(&shared_state);
+        let shared_state = Rc::clone(&shared_state);
         move |cx| {
             let mut shared_state = shared_state.borrow_mut();
 
