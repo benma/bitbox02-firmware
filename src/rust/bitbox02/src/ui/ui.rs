@@ -165,17 +165,20 @@ pub async fn confirm(params: &ConfirmParams<'_>) -> bool {
         waker: Option<Waker>,
         result: Option<bool>,
     }
-    let shared_state = Rc::new(RefCell::new(SharedState {
+    let shared_state = Box::new(RefCell::new(SharedState {
         waker: None,
         result: None,
     }));
+    let shared_state_ptr = shared_state.as_ref() as *const RefCell<SharedState> as *mut c_void;
 
     unsafe extern "C" fn callback(result: bool, user_data: *mut c_void) {
-        let shared_state: Rc<RefCell<SharedState>> = unsafe { Rc::from_raw(user_data as *mut _) };
+        let shared_state = unsafe { &*(user_data as *mut RefCell<SharedState>) };
         let mut shared_state = shared_state.borrow_mut();
-        shared_state.result = Some(result);
-        if let Some(waker) = shared_state.waker.as_ref() {
-            waker.wake_by_ref();
+        if shared_state.result.is_none() {
+            shared_state.result = Some(result);
+            if let Some(waker) = shared_state.waker.as_ref() {
+                waker.wake_by_ref();
+            }
         }
     }
 
@@ -203,7 +206,7 @@ pub async fn confirm(params: &ConfirmParams<'_>) -> bool {
         bitbox02_sys::confirm_create(
             &c_params,
             Some(callback),
-            Rc::into_raw(Rc::clone(&shared_state)) as *mut _, // passed to callback as `user_data`.
+            shared_state_ptr, // passed to callback as `user_data`.
         )
     };
 
@@ -214,7 +217,7 @@ pub async fn confirm(params: &ConfirmParams<'_>) -> bool {
     component.screen_stack_push();
 
     core::future::poll_fn({
-        let shared_state = Rc::clone(&shared_state);
+        let shared_state = &shared_state;
         move |cx| {
             let mut shared_state = shared_state.borrow_mut();
 
